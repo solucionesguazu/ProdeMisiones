@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Settings, CheckCircle2, Edit2 } from "lucide-react";
+import { Settings, CheckCircle2, Edit2, Lock } from "lucide-react";
 import Image from "next/image";
 
 type Partido = {
@@ -19,7 +19,6 @@ type Posicion = {
   puntos: number;
 };
 
-// Tipo para saber el estado de cada pronóstico
 type EstadoPronostico = {
   local: string;
   visitante: string;
@@ -42,7 +41,6 @@ export default function Dashboard() {
         const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
         setUserName(nombre);
         
-        // 1. Cargar próximos partidos
         const { data: partidosData } = await supabase
           .from('partidos')
           .select('*')
@@ -50,13 +48,11 @@ export default function Dashboard() {
 
         if (partidosData) setPartidos(partidosData);
 
-        // 2. Cargar pronósticos de TODOS para la tabla de posiciones
         const { data: pronosticosData } = await supabase
           .from('pronosticos')
           .select('usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
 
         if (pronosticosData) {
-          // A. Calcular Ranking
           const ranking: Record<string, number> = {};
           pronosticosData.forEach(p => {
             const alias = p.usuario_alias || 'Anónimo';
@@ -70,7 +66,6 @@ export default function Dashboard() {
             
           setPosiciones(rankingArray);
 
-          // B. Buscar si el usuario actual ya tiene pronósticos guardados y pintar las casillas
           const misPronosticos = pronosticosData.filter(p => p.usuario_alias === nombre);
           const estadoInicial: Record<number, EstadoPronostico> = {};
           
@@ -78,7 +73,7 @@ export default function Dashboard() {
              estadoInicial[p.partido_id] = {
                local: p.prediccion_local.toString(),
                visitante: p.prediccion_visitante.toString(),
-               guardado: true // Marca que ya está en la base de datos
+               guardado: true 
              };
           });
           setPredicciones(estadoInicial);
@@ -102,7 +97,7 @@ export default function Dashboard() {
       [partidoId]: {
         ...prev[partidoId],
         [equipo]: valor,
-        guardado: false // Al editar, se habilita de nuevo el botón de guardar
+        guardado: false 
       }
     }));
   };
@@ -112,7 +107,7 @@ export default function Dashboard() {
       ...prev,
       [partidoId]: {
         ...prev[partidoId],
-        guardado: false // Pasa a modo edición (botón verde)
+        guardado: false 
       }
     }));
   };
@@ -124,7 +119,6 @@ export default function Dashboard() {
       return;
     }
 
-    // Buscamos si ya existe el ID de este pronóstico para este usuario y este partido
     const { data: existente } = await supabase
       .from('pronosticos')
       .select('id')
@@ -135,7 +129,6 @@ export default function Dashboard() {
     let errorG;
 
     if (existente) {
-      // Si existe, lo actualizamos (UPDATE)
       const { error } = await supabase
         .from('pronosticos')
         .update({ 
@@ -145,7 +138,6 @@ export default function Dashboard() {
         .eq('id', existente.id);
         errorG = error;
     } else {
-       // Si no existe, creamos uno nuevo (INSERT)
       const { error } = await supabase
         .from('pronosticos')
         .insert([
@@ -163,7 +155,6 @@ export default function Dashboard() {
     if (errorG) {
       alert("Error al guardar: " + errorG.message);
     } else {
-      // Marcamos este partido específico como guardado en la pantalla
       setPredicciones(prev => ({
         ...prev,
         [partidoId]: { ...prev[partidoId], guardado: true }
@@ -175,6 +166,13 @@ export default function Dashboard() {
     const opciones: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
     return new Date(fechaString).toLocaleDateString('es-AR', opciones);
   };
+
+  // Lógica para determinar si un partido ya comenzó
+  const ahora = new Date();
+  
+  const partidosActivos = partidos.filter(p => new Date(p.fecha_hora) > ahora);
+  // Tomamos solo los últimos 10 finalizados para no saturar la vista
+  const partidosFinalizados = partidos.filter(p => new Date(p.fecha_hora) <= ahora).slice(-10);
 
   return (
     <main className="min-h-screen bg-slate-900 text-white p-6">
@@ -218,15 +216,16 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* COLUMNA IZQUIERDA: PARTIDOS ACTIVOS */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
             <h2 className="text-xl font-bold mb-4 text-emerald-400">Próximos Partidos</h2>
             
-            {partidos.length === 0 ? (
-              <p className="text-slate-400 text-sm">Cargando partidos...</p>
+            {partidosActivos.length === 0 ? (
+              <p className="text-slate-400 text-sm">No hay partidos pendientes.</p>
             ) : (
               <ul className="space-y-4">
-                {partidos.map((partido) => {
+                {partidosActivos.map((partido) => {
                    const estaGuardado = predicciones[partido.id]?.guardado;
                    
                    return (
@@ -282,6 +281,7 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* COLUMNA DERECHA: TABLA DE POSICIONES */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
             <h2 className="text-xl font-bold mb-4 text-emerald-400">Tabla de Posiciones</h2>
             {posiciones.length === 0 ? (
@@ -305,6 +305,35 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* FILA INFERIOR: PARTIDOS FINALIZADOS / EN JUEGO */}
+        {partidosFinalizados.length > 0 && (
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mt-6">
+            <h2 className="text-xl font-bold mb-4 text-slate-400 flex items-center gap-2">
+               <Lock className="w-5 h-5" /> Partidos Bloqueados (En Juego / Finalizados)
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {partidosFinalizados.map((partido) => (
+                <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-red-900/50 flex flex-col items-center opacity-75">
+                  <span className="text-xs text-red-400 font-bold mb-3 uppercase tracking-wider">Tiempo Expirado</span>
+                  
+                  <div className="flex items-center justify-center gap-2 w-full mb-2">
+                     <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
+                     <div className="w-8 h-8 bg-slate-800 border border-slate-700 flex items-center justify-center rounded text-slate-500 font-bold text-sm">
+                        {predicciones[partido.id]?.local || '-'}
+                     </div>
+                     <span className="text-slate-600 font-bold">-</span>
+                     <div className="w-8 h-8 bg-slate-800 border border-slate-700 flex items-center justify-center rounded text-slate-500 font-bold text-sm">
+                        {predicciones[partido.id]?.visitante || '-'}
+                     </div>
+                     <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
+                  </div>
+                  <span className="text-xs text-slate-500">Tu pronóstico final</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
