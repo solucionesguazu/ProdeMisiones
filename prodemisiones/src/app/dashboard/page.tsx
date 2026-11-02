@@ -167,11 +167,9 @@ export default function Dashboard() {
     return new Date(fechaString).toLocaleDateString('es-AR', opciones);
   };
 
-  // Lógica para determinar si un partido ya comenzó
   const ahora = new Date();
   
   const partidosActivos = partidos.filter(p => new Date(p.fecha_hora) > ahora);
-  // Tomamos solo los últimos 10 finalizados para no saturar la vista
   const partidosFinalizados = partidos.filter(p => new Date(p.fecha_hora) <= ahora).slice(-10);
 
   return (
@@ -179,13 +177,7 @@ export default function Dashboard() {
       <div className="max-w-4xl mx-auto">
         <header className="flex flex-col sm:flex-row justify-between items-center mb-10 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
            <div className="flex items-center gap-4">
-            <Image 
-              src="/logo.jpg" 
-              alt="Logo Prode Misiones" 
-              width={64} 
-              height={64} 
-              className="rounded-lg shadow-md"
-            />
+            <Image alt="Logo Prode Misiones" className="rounded-lg shadow-md" height="{64}" src="/logo.jpg" width="{64}"/>
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight">
                 PRODE <span className="text-emerald-400">MISIONES</span>
@@ -194,17 +186,10 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link 
-              href="/configuracion"
-              className="p-2 text-slate-400 hover:text-emerald-400 transition-colors"
-              title="Configuración de Perfil"
-            >
-              <Settings className="w-6 h-6" />
+            <Link className="p-2 text-slate-400 hover:text-emerald-400 transition-colors" href="/configuracion" title="Configuración de Perfil">
+              <Settings className="w-6 h-6"/>
             </Link>
-            <Link 
-              href="/reglas"
-              className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500"
-            >
+            <Link className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500" href="/reglas">
               Ver Reglas
             </Link>
             <button 
@@ -246,95 +231,4 @@ export default function Dashboard() {
                         
                         <span className="text-slate-500 font-bold px-1">-</span>
                         
-                        <input 
-                          type="number" 
-                          min="0"
-                          disabled={estaGuardado}
-                          className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
-                          value={predicciones[partido.id]?.visitante || ''}
-                          onChange={(e) => handleInputChange(partido.id, 'visitante', e.target.value)}
-                        />
-
-                        <span className="font-bold text-lg text-left w-24 truncate">{partido.equipo_visitante}</span>
-                     </div>
-
-                     {estaGuardado ? (
-                       <button 
-                         onClick={() => habilitarEdicion(partido.id)}
-                         className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
-                       >
-                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                         Pronóstico Listo (Editar)
-                       </button>
-                     ) : (
-                       <button 
-                          onClick={() => guardarPronostico(partido.id)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
-                       >
-                          <Edit2 className="w-4 h-4" />
-                          Guardar Predicción
-                       </button>
-                     )}
-                  </li>
-                )})}
-              </ul>
-            )}
-          </div>
-
-          {/* COLUMNA DERECHA: TABLA DE POSICIONES */}
-          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
-            <h2 className="text-xl font-bold mb-4 text-emerald-400">Tabla de Posiciones</h2>
-            {posiciones.length === 0 ? (
-              <p className="text-slate-400 text-sm">Todavía no hay puntajes registrados.</p>
-            ) : (
-              <ul className="space-y-3">
-                {posiciones.map((pos, index) => (
-                  <li key={pos.usuario} className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
-                    <div className="flex items-center gap-3">
-                      <span className={`font-bold w-6 text-center ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
-                        {index + 1}°
-                      </span>
-                      <span className="text-sm font-medium">{pos.usuario}</span>
-                    </div>
-                    <span className="font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
-                      {pos.puntos} pts
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        {/* FILA INFERIOR: PARTIDOS FINALIZADOS / EN JUEGO */}
-        {partidosFinalizados.length > 0 && (
-          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mt-6">
-            <h2 className="text-xl font-bold mb-4 text-slate-400 flex items-center gap-2">
-               <Lock className="w-5 h-5" /> Partidos Bloqueados (En Juego / Finalizados)
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {partidosFinalizados.map((partido) => (
-                <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-red-900/50 flex flex-col items-center opacity-75">
-                  <span className="text-xs text-red-400 font-bold mb-3 uppercase tracking-wider">Tiempo Expirado</span>
-                  
-                  <div className="flex items-center justify-center gap-2 w-full mb-2">
-                     <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
-                     <div className="w-8 h-8 bg-slate-800 border border-slate-700 flex items-center justify-center rounded text-slate-500 font-bold text-sm">
-                        {predicciones[partido.id]?.local || '-'}
-                     </div>
-                     <span className="text-slate-600 font-bold">-</span>
-                     <div className="w-8 h-8 bg-slate-800 border border-slate-700 flex items-center justify-center rounded text-slate-500 font-bold text-sm">
-                        {predicciones[partido.id]?.visitante || '-'}
-                     </div>
-                     <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
-                  </div>
-                  <span className="text-xs text-slate-500">Tu pronóstico final</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                        <input
