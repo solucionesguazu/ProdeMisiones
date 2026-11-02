@@ -19,7 +19,7 @@ type Posicion = {
 };
 
 export default function Dashboard() {
-  const [userEmail, setUserEmail] = useState<string | undefined>("");
+  const [userName, setUserName] = useState<string>("");
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<Record<number, { local: string, visitante: string }>>({});
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
@@ -29,7 +29,9 @@ export default function Dashboard() {
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserEmail(user.email);
+        // Obtenemos el nombre guardado en los metadatos o usamos la primera parte del correo como respaldo
+        const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
+        setUserName(nombre);
         
         const { data: partidosData } = await supabase
           .from('partidos')
@@ -90,7 +92,7 @@ export default function Dashboard() {
       .from('pronosticos')
       .insert([
         { 
-          usuario_alias: userEmail,
+          usuario_alias: userName, // Guarda el pronóstico con el nombre elegido en vez del email
           partido_id: partidoId,
           prediccion_local: parseInt(prediccion.local),
           prediccion_visitante: parseInt(prediccion.visitante),
@@ -119,7 +121,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-extrabold tracking-tight">
               PRODE <span className="text-emerald-400">MISIONES</span>
             </h1>
-            <p className="text-slate-400 mt-1">Hola, {userEmail}</p>
+            <p className="text-slate-400 mt-1">Hola, {userName}</p>
           </div>
           <div className="flex items-center gap-3">
             <Link 
@@ -204,7 +206,7 @@ export default function Dashboard() {
                       <span className={`font-bold w-6 text-center ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
                         {index + 1}°
                       </span>
-                      <span className="text-sm font-medium">{pos.usuario.split('@')[0]}</span>
+                      <span className="text-sm font-medium">{pos.usuario}</span>
                     </div>
                     <span className="font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
                       {pos.puntos} pts
