@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
-import Link from "next/link"; // Agregamos la importación de Link
+import Link from "next/link";
+import { Settings } from "lucide-react";
 
 type Partido = {
   id: number;
@@ -101,7 +102,7 @@ export default function Dashboard() {
       alert("Error al guardar: " + error.message);
     } else {
       alert("¡Pronóstico guardado con éxito!");
-      window.location.reload();
+      window.location.reload(); 
     }
   };
 
@@ -120,12 +121,19 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-400 mt-1">Hola, {userEmail}</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <Link 
+              href="/configuracion"
+              className="p-2 text-slate-400 hover:text-emerald-400 transition-colors"
+              title="Configuración de Perfil"
+            >
+              <Settings className="w-6 h-6" />
+            </Link>
             <Link 
               href="/reglas"
               className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500"
             >
-              Reglas
+              Ver Reglas
             </Link>
             <button 
               onClick={handleLogout}
