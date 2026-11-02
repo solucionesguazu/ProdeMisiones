@@ -6,20 +6,45 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export default function Registro() {
+  const [nombre, setNombre] = useState("");
+  const [fechaNacimiento, setFechaNacimiento] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const calcularEdad = (fecha: string) => {
+    const hoy = new Date();
+    const nac = new Date(fecha);
+    let edad = hoy.getFullYear() - nac.getFullYear();
+    const mes = hoy.getMonth() - nac.getMonth();
+    if (mes < 0 || (mes === 0 && hoy.getDate() < nac.getDate())) {
+      edad--;
+    }
+    return edad;
+  };
+
   const handleRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
+    if (calcularEdad(fechaNacimiento) < 18) {
+      setError("Debés ser mayor de 18 años para participar en el Prode.");
+      setLoading(false);
+      return;
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          nombre: nombre,
+          fecha_nacimiento: fechaNacimiento,
+        },
+      },
     });
 
     if (error) {
@@ -65,6 +90,33 @@ export default function Registro() {
             </div>
           ) : (
             <form onSubmit={handleRegistro} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Nombre o Nickname
+                </label>
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-emerald-500 transition-colors"
+                  placeholder="Ej: Juan, ElKun..."
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Fecha de Nacimiento
+                </label>
+                <input
+                  type="date"
+                  value={fechaNacimiento}
+                  onChange={(e) => setFechaNacimiento(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-emerald-500 transition-colors"
+                  required
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Correo Electrónico
