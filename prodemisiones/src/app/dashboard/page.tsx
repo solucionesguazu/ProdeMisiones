@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Settings, CheckCircle2, Edit2 } from "lucide-react";
+import Image from "next/image";
 
 type Partido = {
   id: number;
@@ -18,10 +19,18 @@ type Posicion = {
   puntos: number;
 };
 
+// Tipo para saber el estado de cada pronóstico
+type EstadoPronostico = {
+  local: string;
+  visitante: string;
+  guardado: boolean;
+};
+
 export default function Dashboard() {
   const [userName, setUserName] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string>("");
   const [partidos, setPartidos] = useState<Partido[]>([]);
-  const [predicciones, setPredicciones] = useState<Record<number, { local: string, visitante: string }>>({});
+  const [predicciones, setPredicciones] = useState<Record<number, EstadoPronostico>>({});
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
   const router = useRouter();
 
@@ -29,10 +38,11 @@ export default function Dashboard() {
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Obtenemos el nombre guardado en los metadatos o usamos la primera parte del correo como respaldo
+        setUserEmail(user.email || "");
         const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
         setUserName(nombre);
         
+        // 1. Cargar próximos partidos
         const { data: partidosData } = await supabase
           .from('partidos')
           .select('*')
@@ -40,11 +50,13 @@ export default function Dashboard() {
 
         if (partidosData) setPartidos(partidosData);
 
+        // 2. Cargar pronósticos de TODOS para la tabla de posiciones
         const { data: pronosticosData } = await supabase
           .from('pronosticos')
-          .select('usuario_alias, puntos_obtenidos');
+          .select('usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
 
         if (pronosticosData) {
+          // A. Calcular Ranking
           const ranking: Record<string, number> = {};
           pronosticosData.forEach(p => {
             const alias = p.usuario_alias || 'Anónimo';
@@ -57,6 +69,19 @@ export default function Dashboard() {
             .sort((a, b) => b.puntos - a.puntos);
             
           setPosiciones(rankingArray);
+
+          // B. Buscar si el usuario actual ya tiene pronósticos guardados y pintar las casillas
+          const misPronosticos = pronosticosData.filter(p => p.usuario_alias === nombre);
+          const estadoInicial: Record<number, EstadoPronostico> = {};
+          
+          misPronosticos.forEach(p => {
+             estadoInicial[p.partido_id] = {
+               local: p.prediccion_local.toString(),
+               visitante: p.prediccion_visitante.toString(),
+               guardado: true // Marca que ya está en la base de datos
+             };
+          });
+          setPredicciones(estadoInicial);
         }
       } else {
         router.push("/login"); 
@@ -76,7 +101,18 @@ export default function Dashboard() {
       ...prev,
       [partidoId]: {
         ...prev[partidoId],
-        [equipo]: valor
+        [equipo]: valor,
+        guardado: false // Al editar, se habilita de nuevo el botón de guardar
+      }
+    }));
+  };
+
+  const habilitarEdicion = (partidoId: number) => {
+    setPredicciones(prev => ({
+      ...prev,
+      [partidoId]: {
+        ...prev[partidoId],
+        guardado: false // Pasa a modo edición (botón verde)
       }
     }));
   };
@@ -88,23 +124,50 @@ export default function Dashboard() {
       return;
     }
 
-    const { error } = await supabase
+    // Buscamos si ya existe el ID de este pronóstico para este usuario y este partido
+    const { data: existente } = await supabase
       .from('pronosticos')
-      .insert([
-        { 
-          usuario_alias: userName, // Guarda el pronóstico con el nombre elegido en vez del email
-          partido_id: partidoId,
-          prediccion_local: parseInt(prediccion.local),
-          prediccion_visitante: parseInt(prediccion.visitante),
-          puntos_obtenidos: 0
-        }
-      ]);
+      .select('id')
+      .eq('usuario_alias', userName)
+      .eq('partido_id', partidoId)
+      .single();
 
-    if (error) {
-      alert("Error al guardar: " + error.message);
+    let errorG;
+
+    if (existente) {
+      // Si existe, lo actualizamos (UPDATE)
+      const { error } = await supabase
+        .from('pronosticos')
+        .update({ 
+          prediccion_local: parseInt(prediccion.local),
+          prediccion_visitante: parseInt(prediccion.visitante)
+        })
+        .eq('id', existente.id);
+        errorG = error;
     } else {
-      alert("¡Pronóstico guardado con éxito!");
-      window.location.reload(); 
+       // Si no existe, creamos uno nuevo (INSERT)
+      const { error } = await supabase
+        .from('pronosticos')
+        .insert([
+          { 
+            usuario_alias: userName,
+            partido_id: partidoId,
+            prediccion_local: parseInt(prediccion.local),
+            prediccion_visitante: parseInt(prediccion.visitante),
+            puntos_obtenidos: 0
+          }
+        ]);
+        errorG = error;
+    }
+
+    if (errorG) {
+      alert("Error al guardar: " + errorG.message);
+    } else {
+      // Marcamos este partido específico como guardado en la pantalla
+      setPredicciones(prev => ({
+        ...prev,
+        [partidoId]: { ...prev[partidoId], guardado: true }
+      }));
     }
   };
 
@@ -117,11 +180,20 @@ export default function Dashboard() {
     <main className="min-h-screen bg-slate-900 text-white p-6">
       <div className="max-w-4xl mx-auto">
         <header className="flex flex-col sm:flex-row justify-between items-center mb-10 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">
-              PRODE <span className="text-emerald-400">MISIONES</span>
-            </h1>
-            <p className="text-slate-400 mt-1">Hola, {userName}</p>
+           <div className="flex items-center gap-4">
+            <Image 
+              src="/logo.jpg" 
+              alt="Logo Prode Misiones" 
+              width={64} 
+              height={64} 
+              className="rounded-lg shadow-md"
+            />
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight">
+                PRODE <span className="text-emerald-400">MISIONES</span>
+              </h1>
+              <p className="text-slate-400 mt-1">Hola, {userName}</p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Link 
@@ -154,17 +226,21 @@ export default function Dashboard() {
               <p className="text-slate-400 text-sm">Cargando partidos...</p>
             ) : (
               <ul className="space-y-4">
-                {partidos.map((partido) => (
+                {partidos.map((partido) => {
+                   const estaGuardado = predicciones[partido.id]?.guardado;
+                   
+                   return (
                   <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
                      <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
                      
                      <div className="flex items-center justify-center gap-3 w-full mb-3">
-                        <span className="font-bold text-lg text-right w-24">{partido.equipo_local}</span>
+                        <span className="font-bold text-lg text-right w-24 truncate">{partido.equipo_local}</span>
                         
                         <input 
                           type="number" 
                           min="0"
-                          className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none"
+                          disabled={estaGuardado}
+                          className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
                           value={predicciones[partido.id]?.local || ''}
                           onChange={(e) => handleInputChange(partido.id, 'local', e.target.value)}
                         />
@@ -174,22 +250,34 @@ export default function Dashboard() {
                         <input 
                           type="number" 
                           min="0"
-                          className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none"
+                          disabled={estaGuardado}
+                          className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
                           value={predicciones[partido.id]?.visitante || ''}
                           onChange={(e) => handleInputChange(partido.id, 'visitante', e.target.value)}
                         />
 
-                        <span className="font-bold text-lg text-left w-24">{partido.equipo_visitante}</span>
+                        <span className="font-bold text-lg text-left w-24 truncate">{partido.equipo_visitante}</span>
                      </div>
 
-                     <button 
-                        onClick={() => guardarPronostico(partido.id)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors"
-                     >
-                        Guardar Predicción
-                     </button>
+                     {estaGuardado ? (
+                       <button 
+                         onClick={() => habilitarEdicion(partido.id)}
+                         className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
+                       >
+                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                         Pronóstico Listo (Editar)
+                       </button>
+                     ) : (
+                       <button 
+                          onClick={() => guardarPronostico(partido.id)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
+                       >
+                          <Edit2 className="w-4 h-4" />
+                          Guardar Predicción
+                       </button>
+                     )}
                   </li>
-                ))}
+                )})}
               </ul>
             )}
           </div>
