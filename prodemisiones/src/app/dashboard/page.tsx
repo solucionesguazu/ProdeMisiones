@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
+import Link from "next/link"; // Agregamos la importación de Link
 
 type Partido = {
   id: number;
@@ -29,7 +30,6 @@ export default function Dashboard() {
       if (user) {
         setUserEmail(user.email);
         
-        // 1. Cargar próximos partidos
         const { data: partidosData } = await supabase
           .from('partidos')
           .select('*')
@@ -37,7 +37,6 @@ export default function Dashboard() {
 
         if (partidosData) setPartidos(partidosData);
 
-        // 2. Cargar pronósticos y calcular tabla de posiciones
         const { data: pronosticosData } = await supabase
           .from('pronosticos')
           .select('usuario_alias, puntos_obtenidos');
@@ -102,7 +101,7 @@ export default function Dashboard() {
       alert("Error al guardar: " + error.message);
     } else {
       alert("¡Pronóstico guardado con éxito!");
-      window.location.reload(); // Recarga para actualizar la tabla de posiciones automáticamente
+      window.location.reload();
     }
   };
 
@@ -121,12 +120,20 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-400 mt-1">Hola, {userEmail}</p>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-red-500"
-          >
-            Cerrar Sesión
-          </button>
+          <div className="flex gap-3">
+            <Link 
+              href="/reglas"
+              className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500"
+            >
+              Reglas
+            </Link>
+            <button 
+              onClick={handleLogout}
+              className="bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-red-500"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
