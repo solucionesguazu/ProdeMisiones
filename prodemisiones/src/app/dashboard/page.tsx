@@ -32,9 +32,12 @@ export default function Dashboard() {
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<Record<number, EstadoPronostico>>({});
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
+  const [ahora, setAhora] = useState<Date | null>(null);
   const router = useRouter();
 
   useEffect(() => {
+    setAhora(new Date());
+
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -167,13 +170,12 @@ export default function Dashboard() {
     return new Date(fechaString).toLocaleDateString('es-AR', opciones);
   };
 
-  const ahora = new Date();
-  const partidosActivos = partidos.filter(p => new Date(p.fecha_hora) > ahora);
+  const partidosActivos = ahora ? partidos.filter(p => new Date(p.fecha_hora) > ahora) : [];
   
-  const partidosFinalizados = partidos
+  const partidosFinalizados = ahora ? partidos
     .filter(p => new Date(p.fecha_hora) <= ahora)
     .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
-    .slice(0, 20);
+    .slice(0, 20) : [];
 
   return (
     <main className="min-h-screen bg-slate-900 text-white p-6">
