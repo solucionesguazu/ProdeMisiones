@@ -29,7 +29,6 @@ type EstadoPronostico = {
 
 export default function Dashboard() {
   const [userName, setUserName] = useState<string>("");
-  const [userEmail, setUserEmail] = useState<string>("");
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<Record<number, EstadoPronostico>>({});
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
@@ -39,7 +38,6 @@ export default function Dashboard() {
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserEmail(user.email || "");
         const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
         setUserName(nombre);
         
@@ -172,7 +170,6 @@ export default function Dashboard() {
   const ahora = new Date();
   const partidosActivos = partidos.filter(p => new Date(p.fecha_hora) > ahora);
   
-  // Ordena los finalizados del más reciente al más antiguo y toma 20
   const partidosFinalizados = partidos
     .filter(p => new Date(p.fecha_hora) <= ahora)
     .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
