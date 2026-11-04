@@ -38,26 +38,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     setAhora(new Date());
-    useEffect(() => {
-    // Revisamos si el usuario ya vio el mensaje en este dispositivo
+
     const bienvenidaVisto = localStorage.getItem("bienvenida_prode");
     if (!bienvenidaVisto) {
       setMostrarBienvenida(true);
       localStorage.setItem("bienvenida_prode", "true");
     }
-  }, []);
 
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
         setUserName(nombre);
-        
+
         const { data: partidosData } = await supabase
           .from('partidos')
           .select('*')
           .order('fecha_hora', { ascending: true });
-
         if (partidosData) setPartidos(partidosData);
 
         const { data: pronosticosData } = await supabase
@@ -71,30 +68,27 @@ export default function Dashboard() {
             if (!ranking[alias]) ranking[alias] = 0;
             ranking[alias] += p.puntos_obtenidos || 0;
           });
-          
+
           const rankingArray = Object.entries(ranking)
             .map(([usuario, puntos]) => ({ usuario, puntos }))
             .sort((a, b) => b.puntos - a.puntos);
-            
           setPosiciones(rankingArray);
 
           const misPronosticos = pronosticosData.filter(p => p.usuario_alias === nombre);
           const estadoInicial: Record<number, EstadoPronostico> = {};
-          
           misPronosticos.forEach(p => {
-             estadoInicial[p.partido_id] = {
-               local: p.prediccion_local.toString(),
-               visitante: p.prediccion_visitante.toString(),
-               guardado: true 
-             };
+            estadoInicial[p.partido_id] = {
+              local: p.prediccion_local.toString(),
+              visitante: p.prediccion_visitante.toString(),
+              guardado: true
+            };
           });
           setPredicciones(estadoInicial);
         }
       } else {
-        router.push("/login"); 
+        router.push("/login");
       }
     };
-    
     checkUserAndLoadData();
   }, [router]);
 
@@ -109,7 +103,7 @@ export default function Dashboard() {
       [partidoId]: {
         ...prev[partidoId],
         [equipo]: valor,
-        guardado: false 
+        guardado: false
       }
     }));
   };
@@ -119,7 +113,7 @@ export default function Dashboard() {
       ...prev,
       [partidoId]: {
         ...prev[partidoId],
-        guardado: false 
+        guardado: false
       }
     }));
   };
@@ -139,29 +133,26 @@ export default function Dashboard() {
       .single();
 
     let errorG;
-
     if (existente) {
       const { error } = await supabase
         .from('pronosticos')
-        .update({ 
+        .update({
           prediccion_local: parseInt(prediccion.local),
           prediccion_visitante: parseInt(prediccion.visitante)
         })
         .eq('id', existente.id);
-        errorG = error;
+      errorG = error;
     } else {
       const { error } = await supabase
         .from('pronosticos')
-        .insert([
-          { 
-            usuario_alias: userName,
-            partido_id: partidoId,
-            prediccion_local: parseInt(prediccion.local),
-            prediccion_visitante: parseInt(prediccion.visitante),
-            puntos_obtenidos: 0
-          }
-        ]);
-        errorG = error;
+        .insert([{
+          usuario_alias: userName,
+          partido_id: partidoId,
+          prediccion_local: parseInt(prediccion.local),
+          prediccion_visitante: parseInt(prediccion.visitante),
+          puntos_obtenidos: 0
+        }]);
+      errorG = error;
     }
 
     if (errorG) {
@@ -180,17 +171,16 @@ export default function Dashboard() {
   };
 
   const partidosActivos = ahora ? partidos.filter(p => new Date(p.fecha_hora) > ahora) : [];
-  
   const partidosFinalizados = ahora ? partidos
     .filter(p => new Date(p.fecha_hora) <= ahora)
     .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
     .slice(0, 20) : [];
 
   return (
-    <main className="min-h-screen bg-slate-900 text-white p-6">
-      <div className="max-w-4xl mx-auto">
+    <main className="min-h-screen bg-slate-900 text-white p-6 relative">
+      <div className="max-w-4xl mx-auto pb-12">
         <header className="flex flex-col sm:flex-row justify-between items-center mb-10 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
-           <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <Image src="/logo.jpg" alt="Logo Prode Misiones" width={64} height={64} className="rounded-lg shadow-md" />
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight">
@@ -201,7 +191,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/configuracion" className="p-2 text-slate-400 hover:text-emerald-400 transition-colors" title="Configuración de Perfil">
-              <Settings className="w-6 h-6"/>
+              <Settings className="w-6 h-6" />
             </Link>
             <Link href="/reglas" className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500">
               Ver Reglas
@@ -220,38 +210,39 @@ export default function Dashboard() {
             ) : (
               <ul className="space-y-4">
                 {partidosActivos.map((partido) => {
-                   const estaGuardado = predicciones[partido.id]?.guardado;
-                   return (
-                  <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
-                     <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
-                     <div className="flex items-center justify-center gap-3 w-full mb-3">
+                  const estaGuardado = predicciones[partido.id]?.guardado;
+                  return (
+                    <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
+                      <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
+                      <div className="flex items-center justify-center gap-3 w-full mb-3">
                         <span className="font-bold text-lg text-right w-24 truncate">{partido.equipo_local}</span>
-                        <input 
+                        <input
                           type="number" min="0" disabled={estaGuardado}
                           className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
-                          value={predicciones[partido.id]?.local || ''}
+                          value={predicciones[partido.id]?.local || ""}
                           onChange={(e) => handleInputChange(partido.id, 'local', e.target.value)}
                         />
                         <span className="text-slate-500 font-bold px-1">-</span>
-                        <input 
+                        <input
                           type="number" min="0" disabled={estaGuardado}
                           className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
-                          value={predicciones[partido.id]?.visitante || ''}
+                          value={predicciones[partido.id]?.visitante || ""}
                           onChange={(e) => handleInputChange(partido.id, 'visitante', e.target.value)}
                         />
                         <span className="font-bold text-lg text-left w-24 truncate">{partido.equipo_visitante}</span>
-                     </div>
-                     {estaGuardado ? (
-                       <button onClick={() => habilitarEdicion(partido.id)} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
-                         <CheckCircle2 className="w-4 h-4 text-emerald-400"/> Pronóstico Listo (Editar)
-                       </button>
-                     ) : (
-                       <button onClick={() => guardarPronostico(partido.id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
-                          <Edit2 className="w-4 h-4"/> Guardar Predicción
-                       </button>
-                     )}
-                  </li>
-                )})}
+                      </div>
+                      {estaGuardado ? (
+                        <button onClick={() => habilitarEdicion(partido.id)} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Pronóstico Listo (Editar)
+                        </button>
+                      ) : (
+                        <button onClick={() => guardarPronostico(partido.id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
+                          <Edit2 className="w-4 h-4" /> Guardar Predicción
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -283,53 +274,50 @@ export default function Dashboard() {
         {partidosFinalizados.length > 0 && (
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mt-6">
             <h2 className="text-xl font-bold mb-4 text-slate-300 flex items-center gap-2">
-               <History className="w-5 h-5 text-emerald-500"/> Últimos 20 Partidos Finalizados
+              <History className="w-5 h-5 text-emerald-500" /> Últimos 20 Partidos Finalizados
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {partidosFinalizados.map((partido) => {
                 const resultadoOficial = partido.goles_local !== null && partido.goles_visitante !== null;
                 const miPronostico = predicciones[partido.id];
-
                 return (
-                <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
-                  <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
-                  
-                  <div className="flex items-center justify-center gap-2 w-full mb-3">
-                     <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
-                     <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                  <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
+                    <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
+                    <div className="flex items-center justify-center gap-2 w-full mb-3">
+                      <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
+                      <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
                         {resultadoOficial ? partido.goles_local : '-'}
-                     </div>
-                     <span className="text-slate-600 font-bold">-</span>
-                     <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                      </div>
+                      <span className="text-slate-600 font-bold">-</span>
+                      <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
                         {resultadoOficial ? partido.goles_visitante : '-'}
-                     </div>
-                     <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
+                      </div>
+                      <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
+                    </div>
+                    <div className="bg-slate-800 px-3 py-1 rounded-full flex items-center gap-2 text-xs w-full justify-center">
+                      <span className="text-slate-400">Tu pronóstico:</span>
+                      <span className="font-bold text-slate-200">
+                        {miPronostico?.local || '-'} a {miPronostico?.visitante || '-'}
+                      </span>
+                    </div>
+                    {!resultadoOficial && (
+                      <span className="text-[10px] text-amber-500 mt-2 font-medium">Falta cargar resultado real</span>
+                    )}
                   </div>
-                  
-                  <div className="bg-slate-800 px-3 py-1 rounded-full flex items-center gap-2 text-xs w-full justify-center">
-                    <span className="text-slate-400">Tu pronóstico:</span>
-                    <span className="font-bold text-slate-200">
-                      {miPronostico?.local || '-'} a {miPronostico?.visitante || '-'}
-                    </span>
-                  </div>
-
-                  {!resultadoOficial && (
-                    <span className="text-[10px] text-amber-500 mt-2 font-medium">Falta cargar resultado real</span>
-                  )}
-                </div>
-              )})}
+                )
+              })}
             </div>
           </div>
         )}
       </div>
-      {/* Modal de Bienvenida */}
+
+      {/* Modal de Bienvenida Inyectado Correctamente */}
       {mostrarBienvenida && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-lg w-full relative">
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
               ¡Bienvenido a Prode Misiones! ⚽
             </h2>
-            
             <div className="space-y-4 text-slate-300 text-sm leading-relaxed mb-8">
               <p>
                 Nacimos de la pasión por el fútbol y de esas eternas discusiones entre amigos para demostrar quién sabe más antes de que empiece el partido. En Prode Misiones podés competir de forma sana, desafiar a tus amigos y seguir cada torneo con más emoción.
@@ -339,15 +327,11 @@ export default function Dashboard() {
               </p>
               <p>
                 📖 Para conocer todos los detalles de funcionamiento y puntuación, visitá la sección{" "}
-                <Link 
-                  href="/reglas" 
-                  className="text-emerald-400 hover:text-emerald-300 font-bold underline transition-colors"
-                >
+                <Link href="/reglas" className="text-emerald-400 hover:text-emerald-300 font-bold underline transition-colors">
                   Reglas
                 </Link>.
               </p>
             </div>
-
             <button
               onClick={() => setMostrarBienvenida(false)}
               className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 px-4 rounded-lg transition-colors"
@@ -360,4 +344,3 @@ export default function Dashboard() {
     </main>
   );
 }
-
