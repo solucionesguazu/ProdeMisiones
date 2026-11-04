@@ -75,13 +75,16 @@ export default function AdminPanel() {
 
     setGuardandoPartido(true);
 
+    // Ajuste de zona horaria: Le decimos a Supabase que la hora ingresada es local y la convierte a UTC universal para guardarla
+    const fechaConZonaHoraria = new Date(nuevaFecha).toISOString(); 
+
     const { error } = await supabase
       .from('partidos')
       .insert([
         { 
           equipo_local: nuevoLocal,
           equipo_visitante: nuevoVisitante,
-          fecha_hora: nuevaFecha
+          fecha_hora: fechaConZonaHoraria
         }
       ]);
 
