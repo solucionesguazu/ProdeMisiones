@@ -20,11 +20,12 @@ type PronosticoPublico = {
   prediccion_visitante: number;
   puntos_obtenidos: number;
   usuario_alias: string;
-  usuario_id: string;
+  usuario_id?: string;
 };
 
 export default function PerfilJugador({ params }: { params: { id: string } }) {
-  const idJugador = params.id;
+  // 1. Decodificamos la URL y limpiamos espacios invisibles
+  const idJugador = decodeURIComponent(params.id).trim();
   
   const [nombreJugador, setNombreJugador] = useState<string>("Jugador");
   const [partidosFinalizados, setPartidosFinalizados] = useState<Partido[]>([]);
@@ -33,7 +34,6 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     const cargarDatos = async () => {
-      // 1. Traer todos los partidos
       const { data: todosPartidos } = await supabase
         .from('partidos')
         .select('*');
@@ -43,7 +43,6 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
         return;
       }
 
-      // 2. Filtrar SOLO los finalizados
       const ahora = new Date();
       const finalizados = todosPartidos
         .filter(p => new Date(p.fecha_hora) <= ahora)
@@ -51,16 +50,19 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
 
       setPartidosFinalizados(finalizados);
 
-      // 3. Traer los pronósticos (Ajustado para UUID o Alias por retrocompatibilidad)
       const { data: pronosticosTotales } = await supabase
         .from('pronosticos')
         .select('*');
 
       if (pronosticosTotales) {
-        // Filtramos buscando que coincida el usuario_id O el usuario_alias (si es un id viejo)
-        const pronosticosJugador = pronosticosTotales.filter(
-            p => p.usuario_id === idJugador || p.usuario_alias === idJugador
-        );
+        // 2. Forzamos que la comparación sea estrictamente en texto y sin espacios para evitar errores de lectura
+        const pronosticosJugador = pronosticosTotales.filter(p => {
+          const idDB = p.usuario_id ? String(p.usuario_id).trim() : "";
+          const aliasDB = p.usuario_alias ? String(p.usuario_alias).trim() : "";
+          const idBuscado = String(idJugador);
+          
+          return idDB === idBuscado || aliasDB === idBuscado;
+        });
 
         if (pronosticosJugador.length > 0) {
             setNombreJugador(pronosticosJugador[0].usuario_alias || "Jugador");
