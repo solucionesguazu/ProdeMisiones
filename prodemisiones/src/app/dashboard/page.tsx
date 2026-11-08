@@ -162,7 +162,7 @@ export default function Dashboard() {
         .update({ 
           prediccion_local: parseInt(prediccion.local),
           prediccion_visitante: parseInt(prediccion.visitante),
-          usuario_alias: userName // Actualiza el nombre por si el usuario lo cambió en configuración
+          usuario_alias: userName 
         })
         .eq('id', existente.id);
         errorG = error;
@@ -280,18 +280,21 @@ export default function Dashboard() {
               <p className="text-slate-400 text-sm">Todavía no hay puntajes registrados.</p>
             ) : (
               <ul className="space-y-3">
+                {/* ACÁ ESTÁ EL ENLACE AGREGADO */}
                 {posiciones.map((pos, index) => (
-                  <li key={pos.usuario_id} className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700 hover:bg-slate-800/80 cursor-pointer transition-colors" title="Ver pronósticos">
-                    <div className="flex items-center gap-3">
-                      <span className={`font-bold w-6 text-center ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
-                        {index + 1}°
+                  <Link href={`/jugador/${pos.usuario_id}`} key={pos.usuario_id}>
+                    <li className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700 hover:bg-slate-800/80 cursor-pointer transition-colors mb-3" title="Ver pronósticos">
+                      <div className="flex items-center gap-3">
+                        <span className={`font-bold w-6 text-center ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
+                          {index + 1}°
+                        </span>
+                        <span className="text-sm font-medium hover:text-emerald-400 transition-colors">{pos.usuario_nombre}</span>
+                      </div>
+                      <span className="font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
+                        {pos.puntos} pts
                       </span>
-                      <span className="text-sm font-medium">{pos.usuario_nombre}</span>
-                    </div>
-                    <span className="font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
-                      {pos.puntos} pts
-                    </span>
-                  </li>
+                    </li>
+                  </Link>
                 ))}
               </ul>
             )}
@@ -343,7 +346,6 @@ export default function Dashboard() {
         )}
       </div>
       
-      {/* Modal de Bienvenida Inyectado */}
       {mostrarBienvenida && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-lg w-full relative">
