@@ -17,23 +17,26 @@ type Partido = {
 };
 
 type Posicion = {
-  usuario: string;
+  usuario_id: string;
+  usuario_nombre: string;
   puntos: number;
 };
 
 type EstadoPronostico = {
   local: string;
   visitante: string;
+  puntos_obtenidos: number;
   guardado: boolean;
 };
 
 export default function Dashboard() {
-  const [mostrarBienvenida, setMostrarBienvenida] = useState(false);
+  const [userId, setUserId] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<Record<number, EstadoPronostico>>({});
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
   const [ahora, setAhora] = useState<Date | null>(null);
+  const [mostrarBienvenida, setMostrarBienvenida] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -48,47 +51,64 @@ export default function Dashboard() {
     const checkUserAndLoadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setUserId(user.id);
         const nombre = user.user_metadata?.nombre || user.email?.split('@')[0] || "Jugador";
         setUserName(nombre);
-
+        
+        // 1. Cargar Partidos
         const { data: partidosData } = await supabase
           .from('partidos')
           .select('*')
           .order('fecha_hora', { ascending: true });
+
         if (partidosData) setPartidos(partidosData);
 
+        // 2. Cargar Pronósticos (Ahora traemos usuario_id)
         const { data: pronosticosData } = await supabase
           .from('pronosticos')
-          .select('usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
+          .select('usuario_id, usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
 
         if (pronosticosData) {
-          const ranking: Record<string, number> = {};
+          // A. Calcular Ranking agrupando por UUID (Matemáticamente preciso)
+          const rankingMap = new Map<string, Posicion>();
+          
           pronosticosData.forEach(p => {
+            const uId = p.usuario_id || p.usuario_alias; // Fallback por si hay datos viejos sin UUID
             const alias = p.usuario_alias || 'Anónimo';
-            if (!ranking[alias]) ranking[alias] = 0;
-            ranking[alias] += p.puntos_obtenidos || 0;
+            const puntos = p.puntos_obtenidos || 0;
+            
+            if (rankingMap.has(uId)) {
+              const current = rankingMap.get(uId)!;
+              current.puntos += puntos;
+            } else {
+              rankingMap.set(uId, { usuario_id: uId, usuario_nombre: alias, puntos: puntos });
+            }
           });
-
-          const rankingArray = Object.entries(ranking)
-            .map(([usuario, puntos]) => ({ usuario, puntos }))
+          
+          const rankingArray = Array.from(rankingMap.values())
             .sort((a, b) => b.puntos - a.puntos);
+            
           setPosiciones(rankingArray);
 
-          const misPronosticos = pronosticosData.filter(p => p.usuario_alias === nombre);
+          // B. Cargar los pronósticos de ESTE usuario
+          const misPronosticos = pronosticosData.filter(p => (p.usuario_id === user.id) || (p.usuario_alias === nombre && !p.usuario_id));
           const estadoInicial: Record<number, EstadoPronostico> = {};
+          
           misPronosticos.forEach(p => {
-            estadoInicial[p.partido_id] = {
-              local: p.prediccion_local.toString(),
-              visitante: p.prediccion_visitante.toString(),
-              guardado: true
-            };
+             estadoInicial[p.partido_id] = {
+               local: p.prediccion_local.toString(),
+               visitante: p.prediccion_visitante.toString(),
+               puntos_obtenidos: p.puntos_obtenidos || 0,
+               guardado: true 
+             };
           });
           setPredicciones(estadoInicial);
         }
       } else {
-        router.push("/login");
+        router.push("/login"); 
       }
     };
+    
     checkUserAndLoadData();
   }, [router]);
 
@@ -103,7 +123,8 @@ export default function Dashboard() {
       [partidoId]: {
         ...prev[partidoId],
         [equipo]: valor,
-        guardado: false
+        puntos_obtenidos: 0,
+        guardado: false 
       }
     }));
   };
@@ -113,7 +134,7 @@ export default function Dashboard() {
       ...prev,
       [partidoId]: {
         ...prev[partidoId],
-        guardado: false
+        guardado: false 
       }
     }));
   };
@@ -125,34 +146,40 @@ export default function Dashboard() {
       return;
     }
 
+    // Buscamos si existe usando el UUID para evitar duplicados
     const { data: existente } = await supabase
       .from('pronosticos')
       .select('id')
-      .eq('usuario_alias', userName)
+      .eq('usuario_id', userId)
       .eq('partido_id', partidoId)
       .single();
 
     let errorG;
+
     if (existente) {
       const { error } = await supabase
         .from('pronosticos')
-        .update({
+        .update({ 
           prediccion_local: parseInt(prediccion.local),
-          prediccion_visitante: parseInt(prediccion.visitante)
+          prediccion_visitante: parseInt(prediccion.visitante),
+          usuario_alias: userName // Actualiza el nombre por si el usuario lo cambió en configuración
         })
         .eq('id', existente.id);
-      errorG = error;
+        errorG = error;
     } else {
       const { error } = await supabase
         .from('pronosticos')
-        .insert([{
-          usuario_alias: userName,
-          partido_id: partidoId,
-          prediccion_local: parseInt(prediccion.local),
-          prediccion_visitante: parseInt(prediccion.visitante),
-          puntos_obtenidos: 0
-        }]);
-      errorG = error;
+        .insert([
+          { 
+            usuario_id: userId,
+            usuario_alias: userName,
+            partido_id: partidoId,
+            prediccion_local: parseInt(prediccion.local),
+            prediccion_visitante: parseInt(prediccion.visitante),
+            puntos_obtenidos: 0
+          }
+        ]);
+        errorG = error;
     }
 
     if (errorG) {
@@ -171,6 +198,7 @@ export default function Dashboard() {
   };
 
   const partidosActivos = ahora ? partidos.filter(p => new Date(p.fecha_hora) > ahora) : [];
+  
   const partidosFinalizados = ahora ? partidos
     .filter(p => new Date(p.fecha_hora) <= ahora)
     .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
@@ -180,7 +208,7 @@ export default function Dashboard() {
     <main className="min-h-screen bg-slate-900 text-white p-6 relative">
       <div className="max-w-4xl mx-auto pb-12">
         <header className="flex flex-col sm:flex-row justify-between items-center mb-10 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
-          <div className="flex items-center gap-4">
+           <div className="flex items-center gap-4">
             <Image src="/logo.jpg" alt="Logo Prode Misiones" width={64} height={64} className="rounded-lg shadow-md" />
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight">
@@ -191,7 +219,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/configuracion" className="p-2 text-slate-400 hover:text-emerald-400 transition-colors" title="Configuración de Perfil">
-              <Settings className="w-6 h-6" />
+              <Settings className="w-6 h-6"/>
             </Link>
             <Link href="/reglas" className="bg-slate-700 hover:bg-emerald-500 text-slate-200 hover:text-slate-900 px-4 py-2 rounded-lg transition-colors text-sm font-bold border border-slate-600 hover:border-emerald-500">
               Ver Reglas
@@ -210,39 +238,38 @@ export default function Dashboard() {
             ) : (
               <ul className="space-y-4">
                 {partidosActivos.map((partido) => {
-                  const estaGuardado = predicciones[partido.id]?.guardado;
-                  return (
-                    <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
-                      <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
-                      <div className="flex items-center justify-center gap-3 w-full mb-3">
+                   const estaGuardado = predicciones[partido.id]?.guardado;
+                   return (
+                  <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
+                     <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
+                     <div className="flex items-center justify-center gap-3 w-full mb-3">
                         <span className="font-bold text-lg text-right w-24 truncate">{partido.equipo_local}</span>
-                        <input
+                        <input 
                           type="number" min="0" disabled={estaGuardado}
                           className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
-                          value={predicciones[partido.id]?.local || ""}
+                          value={predicciones[partido.id]?.local || ''}
                           onChange={(e) => handleInputChange(partido.id, 'local', e.target.value)}
                         />
                         <span className="text-slate-500 font-bold px-1">-</span>
-                        <input
+                        <input 
                           type="number" min="0" disabled={estaGuardado}
                           className="w-12 h-10 bg-slate-800 border border-slate-600 rounded text-center font-bold focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:bg-slate-700"
-                          value={predicciones[partido.id]?.visitante || ""}
+                          value={predicciones[partido.id]?.visitante || ''}
                           onChange={(e) => handleInputChange(partido.id, 'visitante', e.target.value)}
                         />
                         <span className="font-bold text-lg text-left w-24 truncate">{partido.equipo_visitante}</span>
-                      </div>
-                      {estaGuardado ? (
-                        <button onClick={() => habilitarEdicion(partido.id)} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Pronóstico Listo (Editar)
-                        </button>
-                      ) : (
-                        <button onClick={() => guardarPronostico(partido.id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
-                          <Edit2 className="w-4 h-4" /> Guardar Predicción
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
+                     </div>
+                     {estaGuardado ? (
+                       <button onClick={() => habilitarEdicion(partido.id)} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
+                         <CheckCircle2 className="w-4 h-4 text-emerald-400"/> Pronóstico Listo (Editar)
+                       </button>
+                     ) : (
+                       <button onClick={() => guardarPronostico(partido.id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2">
+                          <Edit2 className="w-4 h-4"/> Guardar Predicción
+                       </button>
+                     )}
+                  </li>
+                )})}
               </ul>
             )}
           </div>
@@ -254,12 +281,12 @@ export default function Dashboard() {
             ) : (
               <ul className="space-y-3">
                 {posiciones.map((pos, index) => (
-                  <li key={pos.usuario} className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
+                  <li key={pos.usuario_id} className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700 hover:bg-slate-800/80 cursor-pointer transition-colors" title="Ver pronósticos">
                     <div className="flex items-center gap-3">
                       <span className={`font-bold w-6 text-center ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
                         {index + 1}°
                       </span>
-                      <span className="text-sm font-medium">{pos.usuario}</span>
+                      <span className="text-sm font-medium">{pos.usuario_nombre}</span>
                     </div>
                     <span className="font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
                       {pos.puntos} pts
@@ -274,44 +301,49 @@ export default function Dashboard() {
         {partidosFinalizados.length > 0 && (
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mt-6">
             <h2 className="text-xl font-bold mb-4 text-slate-300 flex items-center gap-2">
-              <History className="w-5 h-5 text-emerald-500" /> Últimos 20 Partidos Finalizados
+               <History className="w-5 h-5 text-emerald-500"/> Últimos 20 Partidos Finalizados
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {partidosFinalizados.map((partido) => {
                 const resultadoOficial = partido.goles_local !== null && partido.goles_visitante !== null;
                 const miPronostico = predicciones[partido.id];
+
                 return (
-                  <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
-                    <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
-                    <div className="flex items-center justify-center gap-2 w-full mb-3">
-                      <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
-                      <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
+                  <span className="text-xs text-slate-400 mb-3">{formatFecha(partido.fecha_hora)}</span>
+                  
+                  <div className="flex items-center justify-center gap-2 w-full mb-3">
+                     <span className="font-bold text-sm text-right w-20 truncate">{partido.equipo_local}</span>
+                     <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
                         {resultadoOficial ? partido.goles_local : '-'}
-                      </div>
-                      <span className="text-slate-600 font-bold">-</span>
-                      <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
+                     </div>
+                     <span className="text-slate-600 font-bold">-</span>
+                     <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${resultadoOficial ? 'bg-emerald-900 border-emerald-700 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
                         {resultadoOficial ? partido.goles_visitante : '-'}
-                      </div>
-                      <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
-                    </div>
-                    <div className="bg-slate-800 px-3 py-1 rounded-full flex items-center gap-2 text-xs w-full justify-center">
-                      <span className="text-slate-400">Tu pronóstico:</span>
-                      <span className="font-bold text-slate-200">
-                        {miPronostico?.local || '-'} a {miPronostico?.visitante || '-'}
+                     </div>
+                     <span className="font-bold text-sm text-left w-20 truncate">{partido.equipo_visitante}</span>
+                  </div>
+                  
+                  <div className="bg-slate-800 px-3 py-2 rounded-lg flex flex-col items-center gap-1 w-full justify-center">
+                    <span className="text-slate-400 text-xs">Tu pronóstico: <strong className="text-slate-200">{miPronostico?.local || '-'} a {miPronostico?.visitante || '-'}</strong></span>
+                    {resultadoOficial && (
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${miPronostico?.puntos_obtenidos === 6 ? 'bg-emerald-500/20 text-emerald-400' : miPronostico?.puntos_obtenidos === 3 ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                        +{miPronostico?.puntos_obtenidos || 0} pts
                       </span>
-                    </div>
-                    {!resultadoOficial && (
-                      <span className="text-[10px] text-amber-500 mt-2 font-medium">Falta cargar resultado real</span>
                     )}
                   </div>
-                )
-              })}
+
+                  {!resultadoOficial && (
+                    <span className="text-[10px] text-amber-500 mt-2 font-medium">Falta cargar resultado real</span>
+                  )}
+                </div>
+              )})}
             </div>
           </div>
         )}
       </div>
-
-      {/* Modal de Bienvenida Inyectado Correctamente */}
+      
+      {/* Modal de Bienvenida Inyectado */}
       {mostrarBienvenida && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-lg w-full relative">
