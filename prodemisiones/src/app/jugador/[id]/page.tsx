@@ -5,7 +5,6 @@ import { supabase } from "../../../../lib/supabase";
 import Link from "next/link";
 import { ArrowLeft, User, History } from "lucide-react";
 import { useParams } from "next/navigation";
-import Image from "next/image";
 
 type Partido = {
   id: number;
@@ -45,7 +44,7 @@ export default function PerfilJugador() {
         return;
       }
 
-      // 2. Filtrar SOLO los finalizados (que ya pasaron la hora)
+      // 2. Filtrar SOLO los finalizados
       const ahora = new Date();
       const finalizados = todosPartidos
         .filter(p => new Date(p.fecha_hora) <= ahora)
@@ -53,11 +52,11 @@ export default function PerfilJugador() {
 
       setPartidosFinalizados(finalizados);
 
-      // 3. Traer los pronósticos ESPECÍFICOS de este jugador
+      // 3. Traer los pronósticos de este jugador
       const { data: pronosticosJugador } = await supabase
         .from('pronosticos')
         .select('*')
-        .eq('usuario_id', idJugador); // Usamos el UUID de la arquitectura nueva
+        .eq('usuario_id', idJugador);
 
       if (pronosticosJugador && pronosticosJugador.length > 0) {
         setNombreJugador(pronosticosJugador[0].usuario_alias || "Jugador");
@@ -89,7 +88,6 @@ export default function PerfilJugador() {
   return (
     <main className="min-h-screen bg-slate-900 text-white p-6 pb-20 relative">
       <div className="max-w-4xl mx-auto">
-        
         <header className="flex flex-col sm:flex-row justify-between items-center mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
            <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center border-2 border-emerald-500">
