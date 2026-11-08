@@ -20,9 +20,9 @@ type PronosticoPublico = {
   prediccion_visitante: number;
   puntos_obtenidos: number;
   usuario_alias: string;
+  usuario_id: string;
 };
 
-// Pasamos 'params' directamente en lugar de usar useParams()
 export default function PerfilJugador({ params }: { params: { id: string } }) {
   const idJugador = params.id;
   
@@ -51,20 +51,26 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
 
       setPartidosFinalizados(finalizados);
 
-      // 3. Traer los pronósticos de este jugador
-      const { data: pronosticosJugador } = await supabase
+      // 3. Traer los pronósticos (Ajustado para UUID o Alias por retrocompatibilidad)
+      const { data: pronosticosTotales } = await supabase
         .from('pronosticos')
-        .select('*')
-        .eq('usuario_id', idJugador);
+        .select('*');
 
-      if (pronosticosJugador && pronosticosJugador.length > 0) {
-        setNombreJugador(pronosticosJugador[0].usuario_alias || "Jugador");
-        
-        const diccionarioPronosticos: Record<number, PronosticoPublico> = {};
-        pronosticosJugador.forEach(p => {
-          diccionarioPronosticos[p.partido_id] = p;
-        });
-        setPronosticos(diccionarioPronosticos);
+      if (pronosticosTotales) {
+        // Filtramos buscando que coincida el usuario_id O el usuario_alias (si es un id viejo)
+        const pronosticosJugador = pronosticosTotales.filter(
+            p => p.usuario_id === idJugador || p.usuario_alias === idJugador
+        );
+
+        if (pronosticosJugador.length > 0) {
+            setNombreJugador(pronosticosJugador[0].usuario_alias || "Jugador");
+            
+            const diccionarioPronosticos: Record<number, PronosticoPublico> = {};
+            pronosticosJugador.forEach(p => {
+              diccionarioPronosticos[p.partido_id] = p;
+            });
+            setPronosticos(diccionarioPronosticos);
+        }
       }
 
       setCargando(false);
