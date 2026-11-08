@@ -75,7 +75,7 @@ export default function AdminPanel() {
 
     setGuardandoPartido(true);
 
-    // Ajuste de zona horaria: Le decimos a Supabase que la hora ingresada es local y la convierte a UTC universal para guardarla
+    // Ajuste de zona horaria
     const fechaConZonaHoraria = new Date(nuevaFecha).toISOString(); 
 
     const { error } = await supabase
@@ -108,8 +108,10 @@ export default function AdminPanel() {
     }
 
     setCargando(partidoId);
-    const realLocal = parseInt(res.local);
-    const realVisitante = parseInt(res.visitante);
+    
+    // CORRECCIÓN 1: Forzamos la conversión a Número estricto
+    const realLocal = Number(res.local);
+    const realVisitante = Number(res.visitante);
 
     await supabase
       .from('partidos')
@@ -125,11 +127,15 @@ export default function AdminPanel() {
       const promesas = pronosticos.map(p => {
         let puntos = 0;
         
-        if (p.prediccion_local === realLocal && p.prediccion_visitante === realVisitante) {
+        // CORRECCIÓN 2: Forzamos que lo que viene de la BD sea un número antes de comparar
+        const predLocal = Number(p.prediccion_local);
+        const predVisitante = Number(p.prediccion_visitante);
+        
+        if (predLocal === realLocal && predVisitante === realVisitante) {
           puntos = 6;
         } else {
           const diferenciaReal = Math.sign(realLocal - realVisitante);
-          const diferenciaPred = Math.sign(p.prediccion_local - p.prediccion_visitante);
+          const diferenciaPred = Math.sign(predLocal - predVisitante);
           
           if (diferenciaReal === diferenciaPred) {
             puntos = 3;
@@ -147,7 +153,7 @@ export default function AdminPanel() {
 
     setPartidosPendientes(prev => prev.filter(p => p.id !== partidoId));
     setCargando(null);
-    alert("¡Resultados guardados y puntos repartidos a todos los jugadores!");
+    alert("¡Resultados guardados y puntos (6 o 3) repartidos a todos los jugadores!");
   };
 
   return (
