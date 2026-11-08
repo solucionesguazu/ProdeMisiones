@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import Link from "next/link";
 import { ArrowLeft, User, History } from "lucide-react";
-import { useParams } from "next/navigation";
 
 type Partido = {
   id: number;
@@ -23,9 +22,9 @@ type PronosticoPublico = {
   usuario_alias: string;
 };
 
-export default function PerfilJugador() {
-  const params = useParams();
-  const idJugador = params.id as string;
+// Pasamos 'params' directamente en lugar de usar useParams()
+export default function PerfilJugador({ params }: { params: { id: string } }) {
+  const idJugador = params.id;
   
   const [nombreJugador, setNombreJugador] = useState<string>("Jugador");
   const [partidosFinalizados, setPartidosFinalizados] = useState<Partido[]>([]);
