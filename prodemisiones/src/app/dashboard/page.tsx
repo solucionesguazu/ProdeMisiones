@@ -63,17 +63,17 @@ export default function Dashboard() {
 
         if (partidosData) setPartidos(partidosData);
 
-        // 2. Cargar Pronósticos (Ahora traemos usuario_id)
+        // 2. Cargar Pronósticos
         const { data: pronosticosData } = await supabase
           .from('pronosticos')
           .select('usuario_id, usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
 
         if (pronosticosData) {
-          // A. Calcular Ranking agrupando por UUID (Matemáticamente preciso)
+          // A. Calcular Ranking agrupando por UUID
           const rankingMap = new Map<string, Posicion>();
           
           pronosticosData.forEach(p => {
-            const uId = p.usuario_id || p.usuario_alias; // Fallback por si hay datos viejos sin UUID
+            const uId = p.usuario_id || p.usuario_alias; // Fallback por si hay datos sin UUID
             const alias = p.usuario_alias || 'Anónimo';
             const puntos = p.puntos_obtenidos || 0;
             
@@ -146,7 +146,6 @@ export default function Dashboard() {
       return;
     }
 
-    // Buscamos si existe usando el UUID para evitar duplicados
     const { data: existente } = await supabase
       .from('pronosticos')
       .select('id')
@@ -280,7 +279,6 @@ export default function Dashboard() {
               <p className="text-slate-400 text-sm">Todavía no hay puntajes registrados.</p>
             ) : (
               <ul className="space-y-3">
-                {/* ACÁ ESTÁ EL ENLACE AGREGADO */}
                 {posiciones.map((pos, index) => (
                   <Link href={`/jugador/${pos.usuario_id}`} key={pos.usuario_id}>
                     <li className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700 hover:bg-slate-800/80 cursor-pointer transition-colors mb-3" title="Ver pronósticos">
