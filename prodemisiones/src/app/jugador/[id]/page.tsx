@@ -24,8 +24,8 @@ type PronosticoPublico = {
 };
 
 export default function PerfilJugador({ params }: { params: { id: string } }) {
-  // 1. Decodificamos la URL y limpiamos espacios invisibles
-  const idJugador = decodeURIComponent(params.id).trim();
+  // Limpieza inicial extrema de la URL
+  const idJugador = decodeURIComponent(params.id).trim().toLowerCase();
   
   const [nombreJugador, setNombreJugador] = useState<string>("Jugador");
   const [partidosFinalizados, setPartidosFinalizados] = useState<Partido[]>([]);
@@ -34,6 +34,7 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     const cargarDatos = async () => {
+      // 1. Partidos Finalizados
       const { data: todosPartidos } = await supabase
         .from('partidos')
         .select('*');
@@ -50,21 +51,22 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
 
       setPartidosFinalizados(finalizados);
 
+      // 2. Traer TODOS los pronósticos (es más seguro filtrar en el cliente)
       const { data: pronosticosTotales } = await supabase
         .from('pronosticos')
         .select('*');
 
       if (pronosticosTotales) {
-        // 2. Forzamos que la comparación sea estrictamente en texto y sin espacios para evitar errores de lectura
+        // 3. Filtrado "Fuerza Bruta": Comparamos ID y Alias en minúsculas y limpiando espacios
         const pronosticosJugador = pronosticosTotales.filter(p => {
-          const idDB = p.usuario_id ? String(p.usuario_id).trim() : "";
-          const aliasDB = p.usuario_alias ? String(p.usuario_alias).trim() : "";
-          const idBuscado = String(idJugador);
+          const idDB = p.usuario_id ? String(p.usuario_id).trim().toLowerCase() : "";
+          const aliasDB = p.usuario_alias ? String(p.usuario_alias).trim().toLowerCase() : "";
           
-          return idDB === idBuscado || aliasDB === idBuscado;
+          return idDB === idJugador || aliasDB === idJugador;
         });
 
         if (pronosticosJugador.length > 0) {
+            // Usamos el alias original (con mayúsculas si las tenía) para el título
             setNombreJugador(pronosticosJugador[0].usuario_alias || "Jugador");
             
             const diccionarioPronosticos: Record<number, PronosticoPublico> = {};
@@ -72,6 +74,10 @@ export default function PerfilJugador({ params }: { params: { id: string } }) {
               diccionarioPronosticos[p.partido_id] = p;
             });
             setPronosticos(diccionarioPronosticos);
+        } else {
+             // LOG PARA DEBUGGING: Si no encuentra, esto nos dirá por qué en la consola del navegador
+             console.log("No se encontraron pronósticos. Buscando:", idJugador);
+             console.log("Muestra de DB (primeros 3):", pronosticosTotales.slice(0,3));
         }
       }
 
