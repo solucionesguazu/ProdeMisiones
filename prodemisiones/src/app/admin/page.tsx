@@ -25,13 +25,11 @@ export default function AdminPanel() {
   const [resultados, setResultados] = useState<Record<number, { local: string; visitante: string }>>({});
   const [cargando, setCargando] = useState<number | null>(null);
   
-  // Estados para el nuevo partido
   const [nuevoLocal, setNuevoLocal] = useState("");
   const [nuevoVisitante, setNuevoVisitante] = useState("");
   const [nuevaFecha, setNuevaFecha] = useState("");
   const [guardandoPartido, setGuardandoPartido] = useState(false);
 
-  // Estados para la gestión de jugadores
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
 
   const router = useRouter();
@@ -40,13 +38,12 @@ export default function AdminPanel() {
     const verificarAdminYCargar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // 1. Verificar si hay un usuario logueado
       if (!user) {
         router.push("/dashboard");
         return;
       }
 
-      // 2. VERIFICACIÓN REAL DE ADMIN: Consulta a la nueva tabla 'admins'
+      // Verificación en la tabla admins
       const { data: adminData } = await supabase
         .from('admins')
         .select('email')
@@ -59,7 +56,6 @@ export default function AdminPanel() {
         return;
       }
 
-      // 3. Cargar partidos pendientes
       const ahora = new Date().toISOString();
       const { data: partidos } = await supabase
         .from('partidos')
@@ -68,14 +64,9 @@ export default function AdminPanel() {
         .is('goles_local', null)
         .order('fecha_hora', { ascending: true });
 
-      if (partidos) {
-        setPartidosPendientes(partidos);
-      }
+      if (partidos) setPartidosPendientes(partidos);
 
-      // 4. Cargar jugadores activos (agrupando desde pronosticos)
-      const { data: pronosticos } = await supabase
-        .from('pronosticos')
-        .select('usuario_id, usuario_alias');
+      const { data: pronosticos } = await supabase.from('pronosticos').select('usuario_id, usuario_alias');
 
       if (pronosticos) {
         const mapaJugadores = new Map<string, Jugador>();
@@ -94,7 +85,6 @@ export default function AdminPanel() {
     verificarAdminYCargar();
   }, [router]);
 
-  // Funciones de Partidos (Crear y Calcular)
   const handleInputChange = (partidoId: number, equipo: 'local' | 'visitante', valor: string) => {
     setResultados(prev => ({
       ...prev, [partidoId]: { ...prev[partidoId], [equipo]: valor }
@@ -123,41 +113,33 @@ export default function AdminPanel() {
     setGuardandoPartido(false);
   };
 
+  // NUEVO MOTOR DE CÁLCULO DE PUNTOS
   const guardarYCalcular = async (partidoId: number) => {
     const res = resultados[partidoId];
     if (!res?.local || !res?.visitante) {
       alert("Completá ambos goles del resultado oficial.");
       return;
     }
+    
     setCargando(partidoId);
-    const realLocal = parseInt(res.local);
-    const realVisitante = parseInt(res.visitante);
+    
+    // Delegamos la transacción atómica directamente a la base de datos usando RPC
+    const { error } = await supabase.rpc('cargar_resultado', {
+      p_partido_id: partidoId,
+      p_goles_local: parseInt(res.local),
+      p_goles_visitante: parseInt(res.visitante)
+    });
 
-    await supabase.from('partidos').update({ goles_local: realLocal, goles_visitante: realVisitante }).eq('id', partidoId);
-
-    const { data: pronosticos } = await supabase.from('pronosticos').select('id, prediccion_local, prediccion_visitante').eq('partido_id', partidoId);
-
-    if (pronosticos && pronosticos.length > 0) {
-      const promesas = pronosticos.map(p => {
-        let puntos = 0;
-        if (p.prediccion_local === realLocal && p.prediccion_visitante === realVisitante) {
-          puntos = 6;
-        } else {
-          const diferenciaReal = Math.sign(realLocal - realVisitante);
-          const diferenciaPred = Math.sign(p.prediccion_local - p.prediccion_visitante);
-          if (diferenciaReal === diferenciaPred) puntos = 3;
-        }
-        return supabase.from('pronosticos').update({ puntos_obtenidos: puntos }).eq('id', p.id);
-      });
-      await Promise.all(promesas);
+    if (error) {
+      alert("Error en el servidor al calcular puntos: " + error.message);
+    } else {
+      setPartidosPendientes(prev => prev.filter(p => p.id !== partidoId));
+      alert("¡Resultados guardados y puntos repartidos a todos los jugadores exitosamente!");
     }
-
-    setPartidosPendientes(prev => prev.filter(p => p.id !== partidoId));
+    
     setCargando(null);
-    alert("¡Resultados guardados y puntos repartidos a todos los jugadores!");
   };
 
-  // Funciones de Gestión de Jugadores
   const eliminarJugador = async (idJugador: string, alias: string) => {
     const confirmacion = window.confirm(`ATENCIÓN: ¿Estás seguro de que querés eliminar a ${alias}? Esto borrará todos sus pronósticos y lo sacará del ranking de forma irreversible.`);
     if (confirmacion) {
@@ -172,7 +154,7 @@ export default function AdminPanel() {
   };
 
   const bloquearJugadorInfo = () => {
-    alert("Para BLOQUEAR el acceso (que no puedan iniciar sesión), ingresá a supabase.com > Authentication > Users. Hacé clic en los 3 puntitos al lado del correo del infractor y seleccioná 'Suspend User'.");
+    alert("Para BLOQUEAR el acceso, ingresá a supabase.com > Authentication > Users. Hacé clic en los 3 puntitos al lado del correo del infractor y seleccioná 'Suspend User'.");
   };
 
   return (
@@ -194,7 +176,6 @@ export default function AdminPanel() {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* SECCIÓN 1: CREAR PARTIDO */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
             <h2 className="text-xl font-bold mb-6 text-emerald-400 flex items-center gap-2">
               <PlusCircle className="w-5 h-5"/> Crear Nuevo Partido
@@ -219,7 +200,6 @@ export default function AdminPanel() {
             </form>
           </div>
 
-          {/* SECCIÓN 2: CARGAR RESULTADOS Y REPARTIR PUNTOS */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
             <h2 className="text-xl font-bold mb-6 text-amber-500 flex items-center gap-2">
                <Calculator className="w-5 h-5"/> Repartir Puntos
@@ -256,7 +236,6 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* SECCIÓN 3: GESTIÓN DE JUGADORES */}
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 border-b border-slate-700 pb-4">
              <h2 className="text-xl font-bold text-white flex items-center gap-2">
