@@ -119,6 +119,9 @@ export default function PerfilJugador() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Historial de pronósticos de</p>
               <h1 className="text-3xl font-extrabold text-white">{nombreJugador}</h1>
+              <p className="text-xs text-slate-500 mt-1">
+  ID: {idJugador} · pronósticos encontrados: {Object.keys(pronosticos).length}
+</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
