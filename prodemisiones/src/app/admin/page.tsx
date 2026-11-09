@@ -21,9 +21,6 @@ type Jugador = {
 };
 
 export default function AdminPanel() {
-  // REEMPLAZÁ ESTE CORREO POR TU CORREO REAL DE ADMINISTRADOR
-  const ADMIN_EMAIL = "jmrebatta@gmail.com"; 
-
   const [partidosPendientes, setPartidosPendientes] = useState<Partido[]>([]);
   const [resultados, setResultados] = useState<Record<number, { local: string; visitante: string }>>({});
   const [cargando, setCargando] = useState<number | null>(null);
@@ -43,13 +40,26 @@ export default function AdminPanel() {
     const verificarAdminYCargar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user || user.email !== ADMIN_EMAIL) {
-        alert("Acceso denegado. Solo el administrador puede ver esta página.");
+      // 1. Verificar si hay un usuario logueado
+      if (!user) {
         router.push("/dashboard");
         return;
       }
 
-      // 1. Cargar partidos pendientes
+      // 2. VERIFICACIÓN REAL DE ADMIN: Consulta a la nueva tabla 'admins'
+      const { data: adminData } = await supabase
+        .from('admins')
+        .select('email')
+        .eq('email', user.email)
+        .single();
+
+      if (!adminData) {
+        alert("Acceso denegado. Solo los administradores registrados pueden ver esta página.");
+        router.push("/dashboard");
+        return;
+      }
+
+      // 3. Cargar partidos pendientes
       const ahora = new Date().toISOString();
       const { data: partidos } = await supabase
         .from('partidos')
@@ -62,7 +72,7 @@ export default function AdminPanel() {
         setPartidosPendientes(partidos);
       }
 
-      // 2. Cargar jugadores activos (agrupando desde pronosticos)
+      // 4. Cargar jugadores activos (agrupando desde pronosticos)
       const { data: pronosticos } = await supabase
         .from('pronosticos')
         .select('usuario_id, usuario_alias');
