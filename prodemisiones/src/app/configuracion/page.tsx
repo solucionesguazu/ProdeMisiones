@@ -13,7 +13,6 @@ export default function Configuracion() {
   
   const [fechaNacimiento, setFechaNacimiento] = useState("");
   
-  const [passwordActual, setPasswordActual] = useState("");
   const [nuevaPassword, setNuevaPassword] = useState("");
   const [confirmarPassword, setConfirmarPassword] = useState("");
   
@@ -215,16 +214,7 @@ export default function Configuracion() {
               <Key className="w-5 h-5 mr-2" /> Contraseña
             </h3>
             <form onSubmit={handleActualizarPassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Contraseña actual</label>
-                <input
-                  type="password"
-                  value={passwordActual}
-                  onChange={(e) => setPasswordActual(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-4 py-2 focus:border-emerald-500 focus:outline-none"
-                  required
-                />
-              </div>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Nueva contraseña</label>
