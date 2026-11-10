@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Settings, CheckCircle2, Edit2, History, Lock, ShieldAlert, Trophy, Calendar } from "lucide-react";
+import { Settings, CheckCircle2, Edit2, Lock, Trophy, Calendar } from "lucide-react";
 import Image from "next/image";
 
 type Jornada = { id: number; nombre: string; activa: boolean; estado: string; };
@@ -50,21 +50,48 @@ export default function Dashboard() {
   const [tabRanking, setTabRanking] = useState<'fecha' | 'global'>('fecha');
 
   const [ahora, setAhora] = useState<Date | null>(null);
+  const [desfasajeReloj, setDesfasajeReloj] = useState<number>(0);
   const [mostrarBienvenida, setMostrarBienvenida] = useState(false);
   const [guardando, setGuardando] = useState<number | null>(null);
   
   const router = useRouter();
 
+  // EFECTO 1: Sincronización Segura del Reloj (Auditoría)
   useEffect(() => {
-    setAhora(new Date());
-    const interval = setInterval(() => setAhora(new Date()), 60000); // Actualiza reloj cada minuto
-    
+    let offset = 0;
+
+    const inicializarReloj = async () => {
+      // 1. Obtener la hora EXACTA y segura del servidor
+      const { data: horaServidor } = await supabase.rpc('obtener_hora_servidor');
+      if (horaServidor) {
+        const horaReal = new Date(horaServidor).getTime();
+        const horaLocal = new Date().getTime();
+        offset = horaReal - horaLocal; // Calculamos si el usuario tiene el reloj adelantado o atrasado
+        setDesfasajeReloj(offset);
+      }
+      
+      // 2. Aplicamos la corrección a nuestro reloj interno
+      setAhora(new Date(new Date().getTime() + offset));
+    };
+
+    inicializarReloj();
+
+    // 3. El reloj sigue corriendo, pero siempre con el desfasaje de seguridad aplicado
+    const interval = setInterval(() => {
+      setAhora(new Date(new Date().getTime() + offset));
+    }, 10000); // Actualiza cada 10 segundos para más precisión cerca del cierre
+
     const bienvenidaVisto = localStorage.getItem("bienvenida_prode");
     if (!bienvenidaVisto) {
       setMostrarBienvenida(true);
       localStorage.setItem("bienvenida_prode", "true");
     }
 
+    return () => clearInterval(interval);
+  }, []);
+
+  // EFECTO 2: Carga de Datos Base
+  useEffect(() => {
     const cargarDatos = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -87,17 +114,14 @@ export default function Dashboard() {
       const { data: todosPartidos } = await supabase.from('partidos').select('*');
       const { data: pronosticosData } = await supabase.from('pronosticos').select('usuario_id, usuario_alias, puntos_obtenidos, partido_id, prediccion_local, prediccion_visitante');
 
-      const mapaPartidos = new Map<number, number>(); // partidoId -> jornadaId
+      const mapaPartidos = new Map<number, number>(); 
       todosPartidos?.forEach(p => mapaPartidos.set(p.id, p.jornada_id));
 
       if (pronosticosData) {
         const mapaGlobal = new Map<string, Posicion>();
-        
-        // Mis predicciones
         const misPredicciones: Record<number, EstadoPronostico> = {};
 
         pronosticosData.forEach(p => {
-          // Si es un pronóstico mío, lo guardo para mostrarlo en pantalla
           if (p.usuario_id === user.id) {
             misPredicciones[p.partido_id] = {
               local: p.prediccion_local.toString(),
@@ -107,7 +131,6 @@ export default function Dashboard() {
             };
           }
 
-          // Cálculos para el Ranking Global
           const uId = p.usuario_id || p.usuario_alias;
           const alias = p.usuario_alias || 'Anónimo';
           const puntos = p.puntos_obtenidos || 0;
@@ -125,15 +148,13 @@ export default function Dashboard() {
     };
 
     cargarDatos();
-    return () => clearInterval(interval);
   }, [router]);
 
-  // Efecto cuando cambia la jornada seleccionada
+  // EFECTO 3: Cargar datos específicos de la jornada seleccionada
   useEffect(() => {
     const cargarJornada = async () => {
       if (!jornadaSeleccionada || !userId) return;
 
-      // Saber si el usuario "Acreditó el poroto" para esta fecha
       const { data: dataInsc } = await supabase
         .from('inscripciones')
         .select('*')
@@ -143,7 +164,6 @@ export default function Dashboard() {
       
       setInscripcion(dataInsc || null);
 
-      // Partidos de esta jornada
       const { data: partidosJornada } = await supabase
         .from('partidos')
         .select('*')
@@ -152,14 +172,12 @@ export default function Dashboard() {
       
       if (partidosJornada) setPartidos(partidosJornada);
 
-      // Recalcular Ranking de Esta Jornada
       const { data: pronosticosJornada } = await supabase
         .from('pronosticos')
         .select('usuario_id, usuario_alias, puntos_obtenidos, partido_id');
       
       const mapaFecha = new Map<string, Posicion>();
       pronosticosJornada?.forEach(p => {
-        // Solo sumamos si el partido del pronóstico pertenece a la jornada actual
         const partidoDelPronostico = partidosJornada?.find(part => part.id === p.partido_id);
         if (partidoDelPronostico) {
           const uId = p.usuario_id || p.usuario_alias;
@@ -218,7 +236,6 @@ export default function Dashboard() {
       alert("Por favor completá ambos goles antes de guardar.");
       return;
     }
-
     setGuardando(partidoId);
 
     const dataAInsertar = {
@@ -242,7 +259,7 @@ export default function Dashboard() {
     setGuardando(null);
   };
 
-  // Separar Partidos Activos de los que están a completar
+  // Uso del reloj blindado ("ahora" ya incluye la corrección del servidor)
   const partidosPendientes = partidos.filter(p => ahora && new Date(p.fecha_hora) > ahora);
   const partidosFinalizados = partidos.filter(p => ahora && new Date(p.fecha_hora) <= ahora);
   const habilitadoParaJugar = inscripcion?.pagado === true;
@@ -251,7 +268,6 @@ export default function Dashboard() {
     <main className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* ENCABEZADO */}
         <header className="flex flex-col sm:flex-row justify-between items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
           <div className="flex items-center gap-4">
             <Image src="/logo.jpg" alt="Logo Prode Misiones" width={64} height={64} className="rounded-lg shadow-md" />
@@ -271,7 +287,6 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* SELECTOR DE JORNADA */}
         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <Calendar className="text-indigo-400 w-5 h-5"/>
@@ -288,7 +303,6 @@ export default function Dashboard() {
           </select>
         </div>
 
-        {/* ALERTA DE INSCRIPCIÓN / PAGO */}
         {jornadaSeleccionada && !inscripcion ? (
           <div className="bg-amber-500/10 border border-amber-500/50 p-6 rounded-2xl text-center shadow-lg">
             <h3 className="text-amber-500 font-bold text-xl mb-2">¡Asegurá tu lugar en esta fecha!</h3>
@@ -305,11 +319,8 @@ export default function Dashboard() {
         ) : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* COLUMNA IZQUIERDA: PARTIDOS */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* PARTIDOS A COMPLETAR (FUTUROS) */}
             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
               <h2 className="text-xl font-bold mb-6 text-emerald-400 flex items-center gap-2">
                 <Edit2 className="w-5 h-5"/> Partidos a completar
@@ -324,7 +335,7 @@ export default function Dashboard() {
                     const prediccion = predicciones[partido.id];
                     const estaGuardado = prediccion?.guardado;
                     return (
-                      <li key={partido.id} className={`bg-slate-900 p-5 rounded-xl border ${estaGuardado ? 'border-emerald-500/50' : 'border-slate-700'} flex flex-col items-center gap-4 transition-all relative overflow-hidden ${!habilitadoParaJugar ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <li key={partido.id} className={`bg-slate-900 p-5 rounded-xl border ${estaGuardado ? 'border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'border-slate-700'} flex flex-col items-center gap-4 transition-all relative overflow-hidden ${!habilitadoParaJugar ? 'opacity-50 pointer-events-none' : ''}`}>
                         <div className="text-center w-full border-b border-slate-800 pb-3">
                            <span className="text-xs text-amber-500 font-bold uppercase tracking-wider block mb-1">
                               {new Date(partido.fecha_hora).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -354,7 +365,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* PARTIDOS ACTIVOS (EN JUEGO / FINALIZADOS) */}
             {partidosFinalizados.length > 0 && (
               <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
                 <h2 className="text-xl font-bold mb-6 text-slate-400 flex items-center gap-2">
@@ -368,7 +378,6 @@ export default function Dashboard() {
                       <div key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-red-900/50 flex flex-col items-center opacity-80 relative overflow-hidden">
                         <span className="text-[10px] text-red-400 font-bold mb-3 uppercase tracking-wider bg-red-500/10 px-2 py-1 rounded">Partido Finalizado</span>
                         
-                        {/* Resultado Real (Oficial) */}
                         <div className="w-full text-center mb-4">
                           <p className="text-[11px] text-slate-400 uppercase font-bold tracking-widest mb-1">Resultado Oficial</p>
                           <div className="flex items-center justify-center gap-3">
@@ -382,7 +391,6 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Mi Pronóstico */}
                         <div className="w-full bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 flex flex-col items-center">
                           <p className="text-[11px] text-indigo-300 uppercase font-bold tracking-widest mb-2">Tu Pronóstico</p>
                           {miPrediccion ? (
@@ -400,7 +408,6 @@ export default function Dashboard() {
                           )}
                         </div>
 
-                        {/* Puntos obtenidos */}
                         {resultadoOficial && miPrediccion && (
                           <div className="absolute top-2 right-2 bg-emerald-500/20 text-emerald-400 font-black text-xs px-2 py-1 rounded-full border border-emerald-500/30">
                             +{miPrediccion.puntos_obtenidos} pts
@@ -417,13 +424,11 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* COLUMNA DERECHA: TABLA DE POSICIONES */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit sticky top-6">
             <h2 className="text-xl font-bold mb-4 text-emerald-400 flex items-center gap-2">
               <Trophy className="w-5 h-5"/> Tabla de Posiciones
             </h2>
             
-            {/* PESTAÑAS DEL RANKING */}
             <div className="flex gap-2 mb-4 bg-slate-900 p-1 rounded-lg border border-slate-700">
               <button onClick={() => setTabRanking('fecha')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${tabRanking === 'fecha' ? 'bg-emerald-500 text-slate-900 shadow' : 'text-slate-400 hover:text-white'}`}>Esta Fecha</button>
               <button onClick={() => setTabRanking('global')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${tabRanking === 'global' ? 'bg-emerald-500 text-slate-900 shadow' : 'text-slate-400 hover:text-white'}`}>Global</button>
@@ -459,7 +464,6 @@ export default function Dashboard() {
         </div>
       </div>
       
-      {/* MODAL DE BIENVENIDA */}
       {mostrarBienvenida && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-800 border border-emerald-500/30 p-8 rounded-2xl shadow-2xl max-w-lg w-full relative">
