@@ -19,7 +19,6 @@ export default function Configuracion() {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "error" | "exito" } | null>(null);
   
-  // Estado para la Zona de Peligro
   const [mostrarConfirmacionBorrado, setMostrarConfirmacionBorrado] = useState(false);
   const [loadingBorrado, setLoadingBorrado] = useState(false);
   
@@ -122,7 +121,6 @@ export default function Configuracion() {
     if (error) {
       setMensaje({ texto: error.message, tipo: "error" });
     } else {
-      setPasswordActual("");
       setNuevaPassword("");
       setConfirmarPassword("");
       setMensaje({ texto: "¡Contraseña cambiada con éxito!", tipo: "exito" });
@@ -132,13 +130,9 @@ export default function Configuracion() {
 
   const handleEliminarCuenta = async () => {
     setLoadingBorrado(true);
-    // Supabase no permite que un usuario se elimine a sí mismo desde el cliente directamente por seguridad sin una Cloud Function, 
-    // pero podemos deshabilitar la sesión y enviar la petición (requerirá configurar Edge Functions o que el admin lo borre).
-    // Para el flujo visual y MVP:
-    const { error } = await supabase.rpc('eliminar_mi_cuenta'); // Función SQL a crear en Supabase si se requiere borrado total.
+    const { error } = await supabase.rpc('eliminar_mi_cuenta');
     
     if (error) {
-       // Fallback visual si no tenés la función SQL:
        setMensaje({ texto: "Contactá al administrador para borrar tus datos definitivamente.", tipo: "error" });
        setMostrarConfirmacionBorrado(false);
     } else {
@@ -214,7 +208,6 @@ export default function Configuracion() {
               <Key className="w-5 h-5 mr-2" /> Contraseña
             </h3>
             <form onSubmit={handleActualizarPassword} className="space-y-4">
-              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Nueva contraseña</label>
