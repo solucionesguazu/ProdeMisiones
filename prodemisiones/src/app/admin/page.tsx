@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calculator, PlusCircle, Users, Trash2, ShieldAlert, CalendarRange } from "lucide-react";
+import { ArrowLeft, Calculator, PlusCircle, Users, Trash2, ShieldAlert, CalendarRange, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
 type Jornada = {
@@ -29,6 +29,14 @@ type Jugador = {
   pronosticos_count: number;
 };
 
+type Inscripcion = {
+  id: number;
+  usuario_id: string;
+  jornada_id: number;
+  pagado: boolean;
+  jornadas?: { nombre: string };
+};
+
 export default function AdminPanel() {
   const [jornadas, setJornadas] = useState<Jornada[]>([]);
   const [nuevaJornada, setNuevaJornada] = useState("");
@@ -45,15 +53,16 @@ export default function AdminPanel() {
   const [guardandoPartido, setGuardandoPartido] = useState(false);
 
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
+  const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
 
   const router = useRouter();
 
   const cargarDatosAdmin = async () => {
-    // Cargar Jornadas
+    // 1. Cargar Jornadas
     const { data: dataJornadas } = await supabase.from('jornadas').select('*').order('id', { ascending: false });
     if (dataJornadas) setJornadas(dataJornadas);
 
-    // Cargar Partidos Pendientes
+    // 2. Cargar Partidos Pendientes
     const ahora = new Date().toISOString();
     const { data: partidos } = await supabase
       .from('partidos')
@@ -61,10 +70,9 @@ export default function AdminPanel() {
       .lt('fecha_hora', ahora)
       .is('goles_local', null)
       .order('fecha_hora', { ascending: true });
-
     if (partidos) setPartidosPendientes(partidos as any);
 
-    // Cargar Jugadores
+    // 3. Cargar Jugadores (Históricos)
     const { data: pronosticos } = await supabase.from('pronosticos').select('usuario_id, usuario_alias');
     if (pronosticos) {
       const mapaJugadores = new Map<string, Jugador>();
@@ -78,6 +86,13 @@ export default function AdminPanel() {
       });
       setJugadores(Array.from(mapaJugadores.values()).sort((a, b) => b.pronosticos_count - a.pronosticos_count));
     }
+
+    // 4. Cargar Inscripciones de Pagos
+    const { data: dataInscripciones } = await supabase
+      .from('inscripciones')
+      .select('id, usuario_id, jornada_id, pagado, jornadas(nombre)')
+      .order('id', { ascending: false });
+    if (dataInscripciones) setInscripciones(dataInscripciones as any);
   };
 
   useEffect(() => {
@@ -112,6 +127,20 @@ export default function AdminPanel() {
       await cargarDatosAdmin();
     }
     setGuardandoJornada(false);
+  };
+
+  // Funciones de Pagos (Inscripciones)
+  const togglePago = async (idInscripcion: number, estadoActual: boolean) => {
+    const { error } = await supabase
+      .from('inscripciones')
+      .update({ pagado: !estadoActual })
+      .eq('id', idInscripcion);
+      
+    if (error) {
+      alert("Error al actualizar el pago: " + error.message);
+    } else {
+      await cargarDatosAdmin(); // Recargamos para que impacte visualmente
+    }
   };
 
   // Funciones de Partidos
@@ -164,7 +193,7 @@ export default function AdminPanel() {
       alert("Error en el servidor al calcular puntos: " + error.message);
     } else {
       setPartidosPendientes(prev => prev.filter(p => p.id !== partidoId));
-      alert("¡Resultados guardados y puntos repartidos a todos los jugadores exitosamente!");
+      alert("¡Resultados guardados y puntos repartidos exitosamente!");
     }
     setCargando(null);
   };
@@ -198,7 +227,7 @@ export default function AdminPanel() {
           </Link>
         </header>
 
-        {/* GESTIÓN DE JORNADAS (NUEVO) */}
+        {/* GESTIÓN DE JORNADAS */}
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mb-6">
           <h2 className="text-xl font-bold mb-6 text-indigo-400 flex items-center gap-2">
             <CalendarRange className="w-5 h-5"/> Gestión de Jornadas
@@ -218,7 +247,7 @@ export default function AdminPanel() {
               {jornadas.length === 0 ? <p className="text-sm text-slate-500">No hay jornadas creadas.</p> : (
                 <ul className="space-y-1">
                   {jornadas.map(j => (
-                    <li key={j.id} className="text-sm text-white flex justify-between">
+                    <li key={j.id} className="text-sm text-white flex justify-between items-center bg-slate-800 p-2 rounded">
                       <span>{j.nombre}</span>
                       <span className={`text-xs px-2 py-1 rounded ${j.estado === 'abierta' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>{j.estado}</span>
                     </li>
@@ -227,6 +256,61 @@ export default function AdminPanel() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* NUEVO: CONTROL DE INSCRIPCIONES Y PAGOS */}
+        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mb-6">
+          <h2 className="text-xl font-bold mb-6 text-emerald-400 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5"/> Acreditación de Porotos (Pagos)
+          </h2>
+          {inscripciones.length === 0 ? (
+            <div className="text-center py-6 bg-slate-900 rounded-xl border border-slate-700">
+              <p className="text-slate-500 text-sm">No hay solicitudes de participación pendientes ni pagadas aún.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto bg-slate-900 rounded-xl border border-slate-700">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-800 text-slate-400 border-b border-slate-700">
+                  <tr>
+                    <th className="p-4">Jugador</th>
+                    <th className="p-4">Jornada</th>
+                    <th className="p-4">Estado de Pago</th>
+                    <th className="p-4">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inscripciones.map(ins => {
+                    // Buscamos el nombre del jugador en el historial de pronósticos
+                    const jugador = jugadores.find(j => j.id === ins.usuario_id);
+                    // Si es nuevo (como Rosita) y no tiene pronósticos previos, mostramos su ID temporalmente
+                    const nombreMostrar = jugador ? jugador.alias : `Usuario Nuevo (${ins.usuario_id.split('-')[0]})`;
+
+                    return (
+                      <tr key={ins.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                        <td className="p-4 font-bold text-white">{nombreMostrar}</td>
+                        <td className="p-4 text-indigo-400 font-semibold">{ins.jornadas?.nombre || 'Desconocida'}</td>
+                        <td className="p-4">
+                          {ins.pagado ? (
+                            <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold">PAGADO</span>
+                          ) : (
+                            <span className="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs font-bold">PENDIENTE</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <button 
+                            onClick={() => togglePago(ins.id, ins.pagado)}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${ins.pagado ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'}`}
+                          >
+                            {ins.pagado ? 'Revocar' : 'Acreditar Poroto'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
