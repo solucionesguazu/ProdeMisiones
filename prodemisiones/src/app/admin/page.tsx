@@ -4,14 +4,23 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calculator, PlusCircle, Users, Trash2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Calculator, PlusCircle, Users, Trash2, ShieldAlert, CalendarRange } from "lucide-react";
 import Image from "next/image";
+
+type Jornada = {
+  id: number;
+  nombre: string;
+  activa: boolean;
+  estado: string;
+};
 
 type Partido = {
   id: number;
   equipo_local: string;
   equipo_visitante: string;
   fecha_hora: string;
+  jornada_id: number;
+  jornadas?: { nombre: string };
 };
 
 type Jugador = {
@@ -21,6 +30,10 @@ type Jugador = {
 };
 
 export default function AdminPanel() {
+  const [jornadas, setJornadas] = useState<Jornada[]>([]);
+  const [nuevaJornada, setNuevaJornada] = useState("");
+  const [guardandoJornada, setGuardandoJornada] = useState(false);
+
   const [partidosPendientes, setPartidosPendientes] = useState<Partido[]>([]);
   const [resultados, setResultados] = useState<Record<number, { local: string; visitante: string }>>({});
   const [cargando, setCargando] = useState<number | null>(null);
@@ -28,73 +41,88 @@ export default function AdminPanel() {
   const [nuevoLocal, setNuevoLocal] = useState("");
   const [nuevoVisitante, setNuevoVisitante] = useState("");
   const [nuevaFecha, setNuevaFecha] = useState("");
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
   const [guardandoPartido, setGuardandoPartido] = useState(false);
 
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
 
   const router = useRouter();
 
+  const cargarDatosAdmin = async () => {
+    // Cargar Jornadas
+    const { data: dataJornadas } = await supabase.from('jornadas').select('*').order('id', { ascending: false });
+    if (dataJornadas) setJornadas(dataJornadas);
+
+    // Cargar Partidos Pendientes
+    const ahora = new Date().toISOString();
+    const { data: partidos } = await supabase
+      .from('partidos')
+      .select('id, equipo_local, equipo_visitante, fecha_hora, jornada_id, jornadas(nombre)')
+      .lt('fecha_hora', ahora)
+      .is('goles_local', null)
+      .order('fecha_hora', { ascending: true });
+
+    if (partidos) setPartidosPendientes(partidos as any);
+
+    // Cargar Jugadores
+    const { data: pronosticos } = await supabase.from('pronosticos').select('usuario_id, usuario_alias');
+    if (pronosticos) {
+      const mapaJugadores = new Map<string, Jugador>();
+      pronosticos.forEach(p => {
+        const uId = p.usuario_id || p.usuario_alias;
+        if (!mapaJugadores.has(uId)) {
+          mapaJugadores.set(uId, { id: uId, alias: p.usuario_alias || 'Anónimo', pronosticos_count: 1 });
+        } else {
+          mapaJugadores.get(uId)!.pronosticos_count++;
+        }
+      });
+      setJugadores(Array.from(mapaJugadores.values()).sort((a, b) => b.pronosticos_count - a.pronosticos_count));
+    }
+  };
+
   useEffect(() => {
     const verificarAdminYCargar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
         router.push("/dashboard");
         return;
       }
-
-      // Verificación en la tabla admins
-      const { data: adminData } = await supabase
-        .from('admins')
-        .select('email')
-        .eq('email', user.email)
-        .single();
-
+      const { data: adminData } = await supabase.from('admins').select('email').eq('email', user.email).single();
       if (!adminData) {
-        alert("Acceso denegado. Solo los administradores registrados pueden ver esta página.");
+        alert("Acceso denegado.");
         router.push("/dashboard");
         return;
       }
-
-      const ahora = new Date().toISOString();
-      const { data: partidos } = await supabase
-        .from('partidos')
-        .select('id, equipo_local, equipo_visitante, fecha_hora')
-        .lt('fecha_hora', ahora)
-        .is('goles_local', null)
-        .order('fecha_hora', { ascending: true });
-
-      if (partidos) setPartidosPendientes(partidos);
-
-      const { data: pronosticos } = await supabase.from('pronosticos').select('usuario_id, usuario_alias');
-
-      if (pronosticos) {
-        const mapaJugadores = new Map<string, Jugador>();
-        pronosticos.forEach(p => {
-          const uId = p.usuario_id || p.usuario_alias;
-          if (!mapaJugadores.has(uId)) {
-            mapaJugadores.set(uId, { id: uId, alias: p.usuario_alias || 'Anónimo', pronosticos_count: 1 });
-          } else {
-            mapaJugadores.get(uId)!.pronosticos_count++;
-          }
-        });
-        setJugadores(Array.from(mapaJugadores.values()).sort((a, b) => b.pronosticos_count - a.pronosticos_count));
-      }
+      await cargarDatosAdmin();
     };
-
     verificarAdminYCargar();
   }, [router]);
 
+  // Funciones de Jornadas
+  const crearNuevaJornada = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevaJornada) return;
+    setGuardandoJornada(true);
+    const { error } = await supabase.from('jornadas').insert([{ nombre: nuevaJornada }]);
+    if (error) {
+      alert("Error al crear jornada: " + error.message);
+    } else {
+      alert("¡Jornada creada con éxito!");
+      setNuevaJornada("");
+      await cargarDatosAdmin();
+    }
+    setGuardandoJornada(false);
+  };
+
+  // Funciones de Partidos
   const handleInputChange = (partidoId: number, equipo: 'local' | 'visitante', valor: string) => {
-    setResultados(prev => ({
-      ...prev, [partidoId]: { ...prev[partidoId], [equipo]: valor }
-    }));
+    setResultados(prev => ({ ...prev, [partidoId]: { ...prev[partidoId], [equipo]: valor } }));
   };
 
   const cargarNuevoPartido = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nuevoLocal || !nuevoVisitante || !nuevaFecha) {
-      alert("Completá todos los campos para crear el partido.");
+    if (!nuevoLocal || !nuevoVisitante || !nuevaFecha || !jornadaSeleccionada) {
+      alert("Completá todos los campos y seleccioná una jornada.");
       return;
     }
     setGuardandoPartido(true);
@@ -102,7 +130,12 @@ export default function AdminPanel() {
 
     const { error } = await supabase
       .from('partidos')
-      .insert([{ equipo_local: nuevoLocal, equipo_visitante: nuevoVisitante, fecha_hora: fechaConZonaHoraria }]);
+      .insert([{ 
+        equipo_local: nuevoLocal, 
+        equipo_visitante: nuevoVisitante, 
+        fecha_hora: fechaConZonaHoraria,
+        jornada_id: parseInt(jornadaSeleccionada)
+      }]);
 
     if (error) {
       alert("Error al guardar el partido: " + error.message);
@@ -113,17 +146,14 @@ export default function AdminPanel() {
     setGuardandoPartido(false);
   };
 
-  // NUEVO MOTOR DE CÁLCULO DE PUNTOS
   const guardarYCalcular = async (partidoId: number) => {
     const res = resultados[partidoId];
     if (!res?.local || !res?.visitante) {
       alert("Completá ambos goles del resultado oficial.");
       return;
     }
-    
     setCargando(partidoId);
     
-    // Delegamos la transacción atómica directamente a la base de datos usando RPC
     const { error } = await supabase.rpc('cargar_resultado', {
       p_partido_id: partidoId,
       p_goles_local: parseInt(res.local),
@@ -136,25 +166,18 @@ export default function AdminPanel() {
       setPartidosPendientes(prev => prev.filter(p => p.id !== partidoId));
       alert("¡Resultados guardados y puntos repartidos a todos los jugadores exitosamente!");
     }
-    
     setCargando(null);
   };
 
   const eliminarJugador = async (idJugador: string, alias: string) => {
-    const confirmacion = window.confirm(`ATENCIÓN: ¿Estás seguro de que querés eliminar a ${alias}? Esto borrará todos sus pronósticos y lo sacará del ranking de forma irreversible.`);
+    const confirmacion = window.confirm(`¿Seguro que querés eliminar a ${alias}?`);
     if (confirmacion) {
       const { error } = await supabase.from('pronosticos').delete().eq('usuario_id', idJugador);
       if (!error) {
         setJugadores(prev => prev.filter(j => j.id !== idJugador));
-        alert(`Los datos de ${alias} fueron eliminados del torneo.`);
-      } else {
-        alert("Error al eliminar: " + error.message);
+        alert(`Datos de ${alias} eliminados.`);
       }
     }
-  };
-
-  const bloquearJugadorInfo = () => {
-    alert("Para BLOQUEAR el acceso, ingresá a supabase.com > Authentication > Users. Hacé clic en los 3 puntitos al lado del correo del infractor y seleccioná 'Suspend User'.");
   };
 
   return (
@@ -175,12 +198,50 @@ export default function AdminPanel() {
           </Link>
         </header>
 
+        {/* GESTIÓN DE JORNADAS (NUEVO) */}
+        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg mb-6">
+          <h2 className="text-xl font-bold mb-6 text-indigo-400 flex items-center gap-2">
+            <CalendarRange className="w-5 h-5"/> Gestión de Jornadas
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={crearNuevaJornada} className="bg-slate-900 p-4 rounded-xl border border-slate-700">
+              <label className="block text-sm font-bold text-slate-400 mb-2">Crear Nueva Jornada</label>
+              <div className="flex gap-2">
+                <input type="text" required placeholder="Ej: Fecha 1" className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:border-indigo-500 focus:outline-none" value={nuevaJornada} onChange={(e) => setNuevaJornada(e.target.value)} />
+                <button type="submit" disabled={guardandoJornada} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50">
+                  {guardandoJornada ? "..." : "Crear"}
+                </button>
+              </div>
+            </form>
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 max-h-32 overflow-y-auto">
+              <label className="block text-sm font-bold text-slate-400 mb-2">Jornadas Existentes</label>
+              {jornadas.length === 0 ? <p className="text-sm text-slate-500">No hay jornadas creadas.</p> : (
+                <ul className="space-y-1">
+                  {jornadas.map(j => (
+                    <li key={j.id} className="text-sm text-white flex justify-between">
+                      <span>{j.nombre}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${j.estado === 'abierta' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>{j.estado}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg h-fit">
             <h2 className="text-xl font-bold mb-6 text-emerald-400 flex items-center gap-2">
               <PlusCircle className="w-5 h-5"/> Crear Nuevo Partido
             </h2>
             <form onSubmit={cargarNuevoPartido} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">Jornada</label>
+                <select required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none" value={jornadaSeleccionada} onChange={(e) => setJornadaSeleccionada(e.target.value)}>
+                  <option value="">Seleccioná una jornada...</option>
+                  {jornadas.map(j => <option key={j.id} value={j.id}>{j.nombre}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">Equipo Local</label>
                 <input type="text" required placeholder="Ej: Boca Juniors" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none" value={nuevoLocal} onChange={(e) => setNuevoLocal(e.target.value.toUpperCase())} />
@@ -192,10 +253,9 @@ export default function AdminPanel() {
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">Fecha y Hora de Inicio</label>
                 <input type="datetime-local" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none [color-scheme:dark]" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)} />
-                <p className="text-xs text-slate-500 mt-2">Los usuarios podrán cargar pronósticos hasta esta fecha exacta.</p>
               </div>
-              <button type="submit" disabled={guardandoPartido} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg transition-colors mt-2 disabled:opacity-50">
-                {guardandoPartido ? "Publicando partido..." : "Publicar Partido"}
+              <button type="submit" disabled={guardandoPartido || jornadas.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg transition-colors mt-2 disabled:opacity-50">
+                {jornadas.length === 0 ? "Primero creá una jornada" : (guardandoPartido ? "Publicando partido..." : "Publicar Partido")}
               </button>
             </form>
           </div>
@@ -214,6 +274,9 @@ export default function AdminPanel() {
                 {partidosPendientes.map((partido) => (
                   <li key={partido.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center gap-4">
                     <div className="text-center w-full border-b border-slate-800 pb-3">
+                       <span className="text-xs text-indigo-400 font-bold uppercase block mb-1">
+                         {partido.jornadas?.nombre || 'Sin Jornada'}
+                       </span>
                        <span className="text-xs text-amber-500 font-bold uppercase tracking-wider block mb-1">
                           {new Date(partido.fecha_hora).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                        </span>
@@ -245,7 +308,6 @@ export default function AdminPanel() {
                Total Activos: <span className="text-emerald-400 ml-1">{jugadores.length}</span>
              </div>
           </div>
-
           {jugadores.length === 0 ? (
             <p className="text-slate-400 text-sm text-center py-4">Aún no hay jugadores con pronósticos cargados.</p>
           ) : (
@@ -263,7 +325,7 @@ export default function AdminPanel() {
                     <button onClick={() => eliminarJugador(jugador.id, jugador.alias)} className="flex-1 bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/50 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1">
                       <Trash2 className="w-3 h-3"/> Eliminar Datos
                     </button>
-                    <button onClick={bloquearJugadorInfo} className="bg-slate-800 hover:bg-amber-500/20 text-slate-400 hover:text-amber-500 border border-slate-700 hover:border-amber-500/50 p-2 rounded-lg transition-colors" title="Bloquear cuenta">
+                    <button onClick={() => alert("Para bloquear ir a Supabase > Authentication")} className="bg-slate-800 hover:bg-amber-500/20 text-slate-400 hover:text-amber-500 border border-slate-700 hover:border-amber-500/50 p-2 rounded-lg transition-colors" title="Bloquear cuenta">
                       <ShieldAlert className="w-4 h-4"/>
                     </button>
                   </div>
