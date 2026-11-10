@@ -257,7 +257,12 @@ export default function Dashboard() {
             <Image src="/logo.jpg" alt="Logo Prode Misiones" width={64} height={64} className="rounded-lg shadow-md" />
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight">PRODE <span className="text-emerald-400">MISIONES</span></h1>
-              <p className="text-slate-400 mt-1 flex items-center gap-2">Hola, {userName} <Settings className="w-4 h-4 cursor-pointer hover:text-emerald-400 transition-colors" onClick={() => router.push('/configuracion')} title="Configuración"/></p>
+              <p className="text-slate-400 mt-1 flex items-center gap-2">
+                Hola, {userName} 
+                <span onClick={() => router.push('/configuracion')} className="cursor-pointer hover:text-emerald-400 transition-colors">
+                  <Settings className="w-4 h-4" />
+                </span>
+              </p>
             </div>
           </div>
           <div className="flex gap-3">
