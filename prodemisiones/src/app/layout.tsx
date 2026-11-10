@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prode Misiones | En Mantenimiento",
-  description: "Estamos renovando la cancha. Volvemos pronto.",
+  title: "Prode Misiones",
+  description: "Jugá al prode con tus amigos",
 };
 
 export default function RootLayout({ children }: any) {
@@ -24,15 +24,15 @@ export default function RootLayout({ children }: any) {
       translate="no"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-screen flex items-center justify-center bg-slate-900 p-4 sm:p-8">
-        <div className="w-full max-w-5xl flex items-center justify-center animate-pulse">
-          {/* Se usa %20 para reemplazar los espacios en el nombre de tu archivo */}
-          <img 
-            src="/Prode%20Misiones%20en%20mantenimiento.png" 
-            alt="Sitio en mantenimiento" 
-            className="w-full h-auto rounded-3xl shadow-2xl border-4 border-amber-500/50"
-          />
+      <body className="min-h-full flex flex-col bg-slate-900">
+        <div className="flex-grow">
+          {children}
         </div>
+        
+        {/* Firma elegante y discreta al final de la página */}
+        <footer className="w-full text-center py-6 text-[11px] text-slate-600/60 tracking-widest font-medium select-none">
+          soluciones Guazu. tel:3764-803852
+        </footer>
       </body>
     </html>
   );
