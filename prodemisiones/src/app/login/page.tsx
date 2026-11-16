@@ -6,6 +6,20 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+function traducirErrorAuth(mensaje: string): string {
+  const m = mensaje.toLowerCase();
+  if (m.includes("invalid login credentials")) {
+    return "Correo o contraseña incorrectos.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "Confirmá tu correo electrónico antes de ingresar.";
+  }
+  if (m.includes("too many requests")) {
+    return "Demasiados intentos. Esperá unos minutos y volvé a probar.";
+  }
+  return "No se pudo iniciar sesión. Verificá tus datos.";
+}
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,16 +29,18 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
       password,
     });
 
-    if (error) {
-      setError(error.message);
+    if (signInError) {
+      setError(traducirErrorAuth(signInError.message));
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -48,7 +64,7 @@ export default function Login() {
           </h2>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded-lg mb-6 text-sm">
+            <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-lg mb-6 text-sm">
               {error}
             </div>
           )}
@@ -73,7 +89,10 @@ export default function Login() {
                 <label className="block text-sm font-medium text-slate-300">
                   Contraseña
                 </label>
-                <Link href="/recuperar" className="text-xs text-emerald-400 hover:underline">
+                <Link
+                  href="/recuperar"
+                  className="text-xs text-emerald-400 hover:underline"
+                >
                   ¿Olvidaste tu contraseña?
                 </Link>
               </div>
