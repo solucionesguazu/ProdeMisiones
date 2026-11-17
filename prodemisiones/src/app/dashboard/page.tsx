@@ -354,7 +354,7 @@ export default function Dashboard() {
     (p) => p.jornada_id === jornadaActivaId
   );
 
-const partidosACompletar = ahora
+  const partidosACompletar = ahora
     ? partidosDeLaJornada.filter((p) => new Date(p.fecha_hora) > ahora)
     : [];
   const partidosIniciadosOFinalizados = ahora
@@ -451,30 +451,57 @@ const partidosACompletar = ahora
           </div>
 
           {jornadaActualObj && (
-            <div className="w-full md:w-auto flex justify-end">
+            <div className="w-full md:w-auto flex flex-col items-stretch md:items-end gap-2">
               {estaHabilitadoParaJugar ? (
                 <span className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold">
                   <Ticket className="w-4 h-4" /> Poroto acreditado en{" "}
                   {jornadaActualObj.nombre}
                 </span>
-              ) : inscripcionActual ? (
-                <span className="inline-flex items-center gap-2 bg-amber-500/15 border border-amber-500/40 text-amber-300 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold">
-                  <Clock className="w-4 h-4" /> Solicitud enviada — Esperando
-                  acreditación del admin
-                </span>
               ) : (
-                <button
-                  onClick={solicitarPoroto}
-                  disabled={
-                    solicitandoPoroto || jornadaActualObj.estado !== "abierta"
-                  }
-                  className="w-full md:w-auto bg-amber-500 hover:bg-amber-400 text-slate-900 font-extrabold px-5 py-2.5 rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Ticket className="w-4 h-4" />
-                  {solicitandoPoroto
-                    ? "Solicitando..."
-                    : "Acreditar mi poroto para jugar"}
-                </button>
+                <>
+                  {inscripcionActual ? (
+                    <span className="inline-flex items-center justify-center gap-2 bg-amber-500/15 border border-amber-500/40 text-amber-300 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold">
+                      <Clock className="w-4 h-4 shrink-0" /> Solicitud enviada —
+                      Esperando acreditación
+                    </span>
+                  ) : (
+                    <button
+                      onClick={solicitarPoroto}
+                      disabled={
+                        solicitandoPoroto ||
+                        jornadaActualObj.estado !== "abierta"
+                      }
+                      className="w-full md:w-auto bg-amber-500 hover:bg-amber-400 text-slate-900 font-extrabold px-5 py-2.5 rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <Ticket className="w-4 h-4" />
+                      {solicitandoPoroto
+                        ? "Solicitando..."
+                        : "Adquirir / Acreditar mi poroto ($3.000)"}
+                    </button>
+                  )}
+
+                  {/* Alias y aviso obligatorio de comprobante */}
+                  <div className="bg-slate-900/90 border border-amber-500/40 rounded-lg px-3.5 py-2 text-xs text-slate-200 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                    <span>
+                      💳 Alias:{" "}
+                      <strong className="text-emerald-400 font-mono select-all">
+                        prod-misiones
+                      </strong>
+                    </span>
+                    <span className="hidden sm:inline text-slate-600">|</span>
+                    <span className="text-amber-300 font-semibold">
+                      📲 Importante: enviar comprobante al{" "}
+                      <a
+                        href="https://wa.me/5493764803852?text=Hola!%20Env%C3%ADo%20mi%20comprobante%20de%20pago%20para%20acreditar%20mi%20poroto%20en%20Prode%20Misiones."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-amber-200 font-bold"
+                      >
+                        3764-803852
+                      </a>
+                    </span>
+                  </div>
+                </>
               )}
             </div>
           )}
